@@ -10,6 +10,11 @@ from database import Database
 from pdf_parser import parse_pdf_marks, convert_arabic_to_latin
 from data_processor import process_marks_data, plot_normal_distribution
 from tabulate import tabulate
+try:
+    from fpdf import FPDF
+except ImportError:
+    logger.error("مكتبة fpdf2 غير مثبتة. يرجى تشغيل 'pip install fpdf2' أو التأكد من تحديث requirements.txt.")
+    exit()
 
 # إعداد التسجيل (Logging)
 logging.basicConfig(
@@ -324,4 +329,4 @@ if __name__ == '__main__':
         logger.error("مكتبة fpdf2 غير مثبتة. يرجى تشغيل 'pip install fpdf2' أو التأكد من تحديث requirements.txt.")
         exit()
         
-    main()
+  

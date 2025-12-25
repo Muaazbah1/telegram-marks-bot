@@ -4,7 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import norm
 from tabulate import tabulate
-from fpdf import FPDF # مكتبة لإنشاء ملفات PDF
+from fpdf import FPDF
 import os
 
 # دالة لرسم التوزيع الطبيعي

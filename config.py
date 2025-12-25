@@ -3,7 +3,7 @@
 # إعدادات بوت تليجرام
 TELEGRAM_BOT_TOKEN = "8308461865:AAG7viIjYF7C050AnkLebXQ5pasgzYSSdK0"
 # معرف القناة التي سيتم الاستماع إليها لتحميل ملفات PDF الجديدة
-TELEGRAM_CHANNEL_USERNAME = "@jjgradebot" # مثال: @Aleppo_Med_Marks
+TELEGRAM_CHANNEL_USERNAME = "jjgradebot" # مثال: @Aleppo_Med_Marks
 
 # إعدادات قاعدة البيانات
 DB_NAME = "students_marks.db"

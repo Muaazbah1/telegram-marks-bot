@@ -1,86 +1,60 @@
-# data_processor.py
+# telegram_marks_bot/data_processor.py
 import pandas as pd
 import numpy as np
-from scipy.stats import norm
 import matplotlib.pyplot as plt
-from config import NORMAL_DISTRIBUTION_IMAGE, STATISTICS_OUTPUT_FILE
+from scipy.stats import norm
+from tabulate import tabulate
+from fpdf import FPDF # مكتبة لإنشاء ملفات PDF
+import os
 
-# لضمان دعم اللغة العربية في الرسوم البيانية
-plt.rcParams['font.family'] = 'DejaVu Sans'
-plt.rcParams['font.sans-serif'] = ['DejaVu Sans']
-
-def calculate_statistics(marks_df):
+# دالة لرسم التوزيع الطبيعي
+def plot_normal_distribution(marks, student_mark, output_path):
     """
-    يحسب الإحصائيات الوصفية للعلامات.
-    marks_df: DataFrame يحتوي على عمود 'mark'.
-    """
-    marks = marks_df['mark']
-    stats = {
-        "العدد الكلي للطلاب": len(marks),
-        "المتوسط الحسابي (Mean)": marks.mean(),
-        "الانحراف المعياري (SD)": marks.std(),
-        "الوسيط (Median)": marks.median(),
-        "أعلى علامة (Max)": marks.max(),
-        "أدنى علامة (Min)": marks.min(),
-        "التباين (Variance)": marks.var(),
-        "الالتواء (Skewness)": marks.skew(),
-        "التفرطح (Kurtosis)": marks.kurt()
-    }
-    return stats
-
-def calculate_percentiles(marks_df):
-    """
-    يحسب الـ percentile لكل علامة.
-    """
-    marks = marks_df['mark'].sort_values(ascending=True)
-    n = len(marks)
+    يرسم التوزيع الطبيعي للعلامات ويحدد موقع علامة الطالب.
     
-    # حساب الـ percentile: (الرتبة / العدد الكلي)
-    # نستخدم method='min' لضمان أن العلامة الأقل تأخذ أقل percentile
-    percentiles = (marks.rank(method='min') / n)
-    
-    marks_df['percentile'] = percentiles
-    return marks_df
-
-def generate_normal_distribution_plot(marks_df, student_mark=None, student_id=None, output_path=NORMAL_DISTRIBUTION_IMAGE):
+    التعديلات:
+    - التسميات بالإنجليزية.
+    - المحور X من 0 إلى 100.
+    - المحور Y يمثل عدد الطلاب (التكرار).
     """
-    يرسم التوزيع الطبيعي للعلامات ويحدد موقع علامة الطالب عليه.
-    """
-    marks = marks_df['mark']
-    mu, std = marks.mean(), marks.std()
     
+    # حساب المتوسط والانحراف المعياري
+    mu = marks.mean()
+    sigma = marks.std()
+    
+    # إعداد الرسم البياني
     plt.figure(figsize=(10, 6))
     
-    # رسم المدرج التكراري (Histogram) للعلامات
-    plt.hist(marks, bins=15, density=True, alpha=0.6, color='g', label='توزيع العلامات الفعلي')
+    # رسم المدرج التكراري (Histogram)
+    # bins: عدد الفئات، density=False لتمثيل عدد الطلاب (التكرار) على المحور Y
+    plt.hist(marks, bins=20, range=(0, 100), density=False, alpha=0.6, color='g', label='Marks Distribution')
     
     # رسم منحنى التوزيع الطبيعي (Normal Distribution Curve)
-    xmin, xmax = plt.xlim()
+    # إنشاء نقاط للمنحنى من 0 إلى 100
+    xmin, xmax = 0, 100
     x = np.linspace(xmin, xmax, 100)
-    p = norm.pdf(x, mu, std)
-    plt.plot(x, p, 'k', linewidth=2, label='منحنى التوزيع الطبيعي')
     
-    title = "توزيع العلامات الطبيعي"
+    # حساب مقياس المنحنى ليناسب المدرج التكراري (Normalization)
+    # scale_factor = (عدد الطلاب * عرض الفئة)
+    bin_width = (xmax - xmin) / 20
+    scale_factor = len(marks) * bin_width
+    
+    p = norm.pdf(x, mu, sigma) * scale_factor
+    
+    plt.plot(x, p, 'k', linewidth=2, label=f'Normal Distribution ($\mu$={mu:.2f}, $\sigma$={sigma:.2f})')
     
     # تحديد موقع علامة الطالب
-    if student_mark is not None:
-        # رسم خط عمودي عند علامة الطالب
-        plt.axvline(student_mark, color='r', linestyle='--', linewidth=2, label=f'علامتك: {student_mark:.2f}')
-        
-        # إضافة نص يوضح موقع الطالب
-        if student_id:
-            title = f"توزيع العلامات الطبيعي - موقع الطالب {student_id}"
-        
-        # تظليل المنطقة التي تسبق علامة الطالب (الـ percentile)
-        percentile_area = np.linspace(xmin, student_mark, 100)
-        # نحتاج إلى حساب الـ PDF على المنطقة المظللة
-        pdf_area = norm.pdf(percentile_area, mu, std)
-        plt.fill_between(percentile_area, pdf_area, color='red', alpha=0.3)
-
-    plt.title(title, fontsize=16)
-    plt.xlabel("العلامة", fontsize=14)
-    plt.ylabel("الكثافة الاحتمالية", fontsize=14)
-    plt.legend(loc='upper right')
+    plt.axvline(student_mark, color='r', linestyle='--', linewidth=2, label=f'Your Mark ({student_mark:.2f})')
+    
+    # إعداد المحاور والتسميات بالإنجليزية
+    plt.title('Marks Distribution and Your Position', fontsize=16)
+    plt.xlabel('Final Mark (0-100)', fontsize=14)
+    plt.ylabel('Number of Students (Frequency)', fontsize=14)
+    
+    # تحديد مدى المحور X من 0 إلى 100
+    plt.xlim(0, 100)
+    
+    plt.legend()
     plt.grid(True, linestyle='--', alpha=0.7)
     
     # حفظ الصورة
@@ -89,82 +63,133 @@ def generate_normal_distribution_plot(marks_df, student_mark=None, student_id=No
     
     return output_path
 
-def create_report_markdown(stats, marks_df):
+# دالة لحساب الإحصائيات
+def calculate_statistics(df):
     """
-    ينشئ تقرير Markdown يحتوي على الإحصائيات وترتيب الطلاب.
+    يحسب الإحصائيات الأساسية والـ percentile لكل طالب.
     """
-    report = "# تقرير تحليل علامات الطلاب\n\n"
-    report += "## الإحصائيات الوصفية للعلامات\n"
-    report += "| الإحصائية | القيمة |\n"
-    report += "| :--- | :--- |\n"
-    for key, value in stats.items():
-        report += f"| {key} | {value:.2f} |\n"
-    report += "\n"
+    marks = df['final_mark']
     
-    report += "## ترتيب الطلاب حسب العلامة\n"
-    # ترتيب الطلاب تنازلياً حسب العلامة
-    ranked_df = marks_df.sort_values(by='mark', ascending=False).reset_index(drop=True)
-    ranked_df.index = ranked_df.index + 1 # بدء الترتيب من 1
+    # الإحصائيات الأساسية
+    stats = {
+        "Mean": marks.mean(),
+        "Median": marks.median(),
+        "Standard Deviation (SD)": marks.std(),
+        "Min Mark": marks.min(),
+        "Max Mark": marks.max(),
+        "Total Students": len(marks)
+    }
     
-    # إضافة عمود الترتيب
-    ranked_df.insert(0, 'الترتيب', ranked_df.index)
+    # حساب الـ percentile لكل طالب
+    # percentile = (عدد الطلاب الذين حصلوا على علامة أقل من علامة الطالب / إجمالي عدد الطلاب) * 100
+    df['percentile'] = df['final_mark'].rank(pct=True) * 100
     
-    report += ranked_df[['الترتيب', 'student_id', 'mark', 'percentile']].to_markdown(index=False, floatfmt=".2f")
-    
-    # حفظ التقرير
-    with open(STATISTICS_OUTPUT_FILE, 'w', encoding='utf-8') as f:
-        f.write(report)
-        
-    return STATISTICS_OUTPUT_FILE
+    return stats, df
 
-def process_marks_data(marks_data):
+# دالة لإنشاء تقرير إحصائي كملف PDF
+def create_statistics_report_pdf(stats, df_with_percentile, image_path, output_path):
     """
-    الدالة الرئيسية لمعالجة العلامات.
-    marks_data: قائمة من القوائم/الصفوف: [(student_id, mark), ...]
+    ينشئ تقرير إحصائي شامل بصيغة PDF.
     """
-    # تحويل البيانات إلى DataFrame
-    marks_df = pd.DataFrame(marks_data, columns=['student_id', 'mark'])
     
-    # حساب الـ percentiles
-    marks_df = calculate_percentiles(marks_df)
-    
-    # حساب الإحصائيات
-    stats = calculate_statistics(marks_df)
-    
-    # توليد تقرير Markdown
-    report_path = create_report_markdown(stats, marks_df)
-    
-    # توليد رسم التوزيع الطبيعي العام
-    general_plot_path = generate_normal_distribution_plot(marks_df)
-    
-    # تحويل DataFrame إلى قائمة من الصفوف لتخزينها في قاعدة البيانات
-    # (student_id, mark, percentile)
-    db_data = marks_df[['student_id', 'mark', 'percentile']].values.tolist()
-    
-    return db_data, stats, report_path, general_plot_path
+    # تعريف فئة PDF مخصصة
+    class PDF(FPDF):
+        def header(self):
+            self.set_font("Arial", "B", 16)
+            self.cell(0, 10, "Statistical Analysis Report", 0, 1, "C")
+            self.ln(5)
 
-if __name__ == '__main__':
-    # مثال للاستخدام والاختبار
-    np.random.seed(42)
-    # توليد 100 علامة بتوزيع طبيعي بمتوسط 75 وانحراف معياري 10
-    sample_marks = np.random.normal(loc=75, scale=10, size=100)
-    # تحويل العلامات إلى قائمة من الصفوف (الرقم الجامعي، العلامة)
-    sample_data = [(f"2020{i+1:05d}", mark) for i, mark in enumerate(sample_marks)]
+        def footer(self):
+            self.set_y(-15)
+            self.set_font("Arial", "I", 8)
+            self.cell(0, 10, f"Page {self.page_no()}/{{nb}}", 0, 0, "C")
+
+    pdf = PDF()
+    pdf.alias_nb_pages()
+    pdf.add_page()
     
-    db_data, stats, report_path, general_plot_path = process_marks_data(sample_data)
+    pdf.set_font("Arial", "", 12)
+    pdf.cell(0, 10, f"Total Students: {stats['Total Students']}", 0, 1)
     
-    print("--- الإحصائيات ---")
-    for k, v in stats.items():
-        print(f"{k}: {v:.2f}")
+    # جدول الإحصائيات الأساسية
+    pdf.set_font("Arial", "B", 12)
+    pdf.cell(0, 10, "Summary Statistics:", 0, 1)
+    
+    # تحويل الإحصائيات إلى جدول tabulate
+    stats_table = [
+        ["Metric", "Value"],
+        ["Mean", f"{stats['Mean']:.2f}"],
+        ["Median", f"{stats['Median']:.2f}"],
+        ["Standard Deviation (SD)", f"{stats['Standard Deviation (SD)']:.2f}"],
+        ["Min Mark", f"{stats['Min Mark']:.2f}"],
+        ["Max Mark", f"{stats['Max Mark']:.2f}"]
+    ]
+    
+    # استخدام tabulate لإنشاء نص الجدول
+    table_text = tabulate(stats_table, headers="firstrow", tablefmt="fancy_grid")
+    
+    # إضافة الجدول كنص إلى PDF
+    pdf.set_font("Courier", "", 10) # استخدام خط أحادي المسافة للجدول
+    for line in table_text.split('\n'):
+        pdf.cell(0, 5, line, 0, 1)
         
-    print(f"\nتم توليد تقرير Markdown: {report_path}")
-    print(f"تم توليد صورة التوزيع الطبيعي العام: {general_plot_path}")
+    pdf.ln(5)
     
-    # مثال على رسم علامة طالب محدد
-    marks_df = pd.DataFrame(sample_data, columns=['student_id', 'mark'])
-    marks_df = calculate_percentiles(marks_df)
-    student_id = "202000050"
-    student_mark = marks_df[marks_df['student_id'] == student_id]['mark'].iloc[0]
-    student_plot_path = f"plot_{student_id}.png"
-    generate_normal_distribution_plot(marks_df, student_mark, student_id, student_plot_path)
-    print(f"تم توليد صورة التوزيع الطبيعي للطالب {student_id}: {student_plot_path}")
+    # إضافة الرسم البياني
+    pdf.set_font("Arial", "B", 12)
+    pdf.cell(0, 10, "Marks Distribution Plot:", 0, 1)
+    pdf.image(image_path, x=10, y=pdf.get_y(), w=180)
+    pdf.ln(110) # ترك مسافة بعد الصورة
+    
+    # إضافة جدول ترتيب الطلاب (أفضل 10)
+    pdf.set_font("Arial", "B", 12)
+    pdf.cell(0, 10, "Top 10 Students by Mark:", 0, 1)
+    
+    # فرز الطلاب
+    top_students = df_with_percentile.sort_values(by='final_mark', ascending=False).head(10)
+    
+    # إعداد بيانات الجدول
+    table_data = []
+    for index, row in top_students.iterrows():
+        # نفترض أن العمود الأول في all_columns هو اسم الطالب
+        # بما أننا لا نعرف ترتيب الأعمدة، سنستخدم الرقم الجامعي والعلامة والـ percentile
+        student_name = row['all_columns'][1] if len(row['all_columns']) > 1 else "N/A"
+        table_data.append([
+            row['student_id'],
+            student_name,
+            f"{row['final_mark']:.2f}",
+            f"{row['percentile']:.2f}%"
+        ])
+        
+    # إضافة الجدول كنص إلى PDF
+    pdf.set_font("Courier", "", 10)
+    table_text = tabulate(table_data, headers=["Student ID", "Name", "Mark", "Percentile"], tablefmt="fancy_grid")
+    for line in table_text.split('\n'):
+        pdf.cell(0, 5, line, 0, 1)
+        
+    pdf.output(output_path, "F")
+    return output_path
+
+# الدالة الرئيسية للمعالجة
+def process_marks_data(df, output_dir):
+    """
+    تنفذ جميع خطوات المعالجة: حساب الإحصائيات، رسم التوزيع، وإنشاء التقرير.
+    """
+    
+    # 1. حساب الإحصائيات والـ percentile
+    stats, df_with_percentile = calculate_statistics(df)
+    
+    # 2. رسم التوزيع الطبيعي
+    image_path = os.path.join(output_dir, "normal_distribution.png")
+    # نستخدم المتوسط كعلامة افتراضية للرسم العام
+    plot_normal_distribution(df['final_mark'], df['final_mark'].mean(), image_path) 
+    
+    # 3. إنشاء تقرير PDF
+    pdf_path = os.path.join(output_dir, "statistical_report.pdf")
+    create_statistics_report_pdf(stats, df_with_percentile, image_path, pdf_path)
+    
+    # 4. تحويل DataFrame إلى قائمة من الصفوف لتخزينها في قاعدة البيانات
+    # (student_id, final_mark, percentile, all_columns)
+    db_data = df_with_percentile[['student_id', 'final_mark', 'percentile', 'all_columns']].values.tolist()
+    
+    return db_data, stats, image_path, pdf_path

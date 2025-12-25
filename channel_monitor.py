@@ -13,10 +13,10 @@ logger = logging.getLogger(__name__)
 
 # --- إعدادات Pyrogram ---
 # يجب الحصول على هذه القيم من موقع my.telegram.org
-API_ID = 1234567 # استبدل بمعرف API الخاص بك
-API_HASH = "YOUR_API_HASH" # استبدل بـ API Hash الخاص بك
-BOT_USERNAME = "@YourMarksBot" # استبدل باسم المستخدم للبوت الرسمي (بدون @)
-CHANNEL_USERNAME = "@YOUR_CHANNEL_USERNAME_HERE" # استبدل باسم مستخدم القناة (مثال: @Aleppo_Med_Marks)
+API_ID = 34958063 # استبدل بمعرف API الخاص بك
+API_HASH = "19095cb702477bb170752463a3cd46a0" # استبدل بـ API Hash الخاص بك
+BOT_USERNAME = "@My_gradesbot" # استبدل باسم المستخدم للبوت الرسمي (بدون @)
+CHANNEL_USERNAME = "@jjgradebot" # استبدل باسم مستخدم القناة (مثال: @Aleppo_Med_Marks)
 
 # --- دالة معالجة رسائل القناة ---
 async def handle_channel_post(client, message):

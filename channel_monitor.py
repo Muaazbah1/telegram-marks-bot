@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 API_ID = 34958063 # استبدل بمعرف API الخاص بك
 API_HASH = "19095cb702477bb170752463a3cd46a0" # استبدل بـ API Hash الخاص بك
 BOT_USERNAME = "@My_gradesbot" # استبدل باسم المستخدم للبوت الرسمي (بدون @)
-CHANNEL_USERNAME = "@jjgradebot" # استبدل باسم مستخدم القناة (مثال: @Aleppo_Med_Marks)
+CHANNEL_USERNAME = "jjgradebot" # استبدل باسم مستخدم القناة (مثال: @Aleppo_Med_Marks)
 
 # --- دالة معالجة رسائل القناة ---
 async def handle_channel_post(client, message):

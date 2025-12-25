@@ -2,6 +2,7 @@
 import logging
 import os
 from pyrogram import Client, filters
+from pyrogram.handlers import MessageHandler
 from pyrogram.errors import SessionPasswordNeeded, PhoneCodeInvalid, FloodWait
 from config import TELEGRAM_BOT_TOKEN # نحتاج فقط للتوكن للحصول على اسم البوت
 
@@ -15,32 +16,36 @@ logger = logging.getLogger(__name__)
 # يجب الحصول على هذه القيم من موقع my.telegram.org
 API_ID = 34958063 # استبدل بمعرف API الخاص بك
 API_HASH = "19095cb702477bb170752463a3cd46a0" # استبدل بـ API Hash الخاص بك
-BOT_USERNAME = "@My_gradesbot" # استبدل باسم المستخدم للبوت الرسمي (بدون @)
-CHANNEL_USERNAME = "jjgradebot" # استبدل باسم مستخدم القناة (مثال: @Aleppo_Med_Marks)
+BOT_USERNAME = "My_gradesbot" # اسم المستخدم للبوت الرسمي (بدون @)
+TARGET_CHANNEL_USERNAME = "jjgradebot" # اسم مستخدم القناة التي سيتم مراقبتها (بدون @)
 
 # --- دالة معالجة رسائل القناة ---
 async def handle_channel_post(client, message):
     """
-    تستمع لرسائل القناة، وإذا كان الملف المرفق هو PDF، تعيد توجيهه إلى البوت الرسمي.
+    تستمع لرسائل القناة، وإذا كان الملف المرفق هو PDF ومن القناة المستهدفة، تعيد توجيهه إلى البوت الرسمي.
     """
-    # التحقق من أن الرسالة من القناة المحددة
-    if message.chat.username == CHANNEL_USERNAME.lstrip('@'):
-        # التحقق من أن الرسالة تحتوي على مستند وأن نوعه هو PDF
-        if message.document and message.document.mime_type == "application/pdf":
-            logger.info(f"تم العثور على ملف PDF جديد في القناة: {CHANNEL_USERNAME}")
+    
+    # 1. التحقق من القناة المستهدفة
+    if message.chat.username != TARGET_CHANNEL_USERNAME:
+        logger.info(f"تجاهل رسالة من قناة غير مستهدفة: @{message.chat.username}")
+        return
+
+    # 2. التحقق من نوع الملف
+    if message.document and message.document.mime_type == "application/pdf":
+        logger.info(f"تم العثور على ملف PDF جديد في القناة المستهدفة: @{TARGET_CHANNEL_USERNAME}")
+        
+        try:
+            # إعادة توجيه الرسالة إلى البوت الرسمي
+            await message.forward(BOT_USERNAME)
+            logger.info(f"تم إعادة توجيه ملف PDF بنجاح إلى البوت: @{BOT_USERNAME}")
             
-            try:
-                # إعادة توجيه الرسالة إلى البوت الرسمي
-                await message.forward(BOT_USERNAME)
-                logger.info(f"تم إعادة توجيه ملف PDF بنجاح إلى البوت: {BOT_USERNAME}")
-                
-                # يمكن إرسال رسالة تأكيد إلى القناة (إذا كان الحساب مشرفاً)
-                # await client.send_message(CHANNEL_USERNAME, "تم استلام ملف العلامات وبدء المعالجة.")
-                
-            except FloodWait as e:
-                logger.error(f"FloodWait: يجب الانتظار {e.value} ثوانٍ قبل إرسال المزيد.")
-            except Exception as e:
-                logger.error(f"فشل إعادة توجيه الرسالة: {e}")
+        except FloodWait as e:
+            logger.error(f"FloodWait: يجب الانتظار {e.value} ثوانٍ قبل إرسال المزيد.")
+        except Exception as e:
+            logger.error(f"فشل إعادة توجيه الرسالة: {e}")
+    else:
+        logger.info(f"تجاهل رسالة من @{TARGET_CHANNEL_USERNAME} لا تحتوي على ملف PDF.")
+
 
 def main():
     """
@@ -50,17 +55,14 @@ def main():
         logger.error("يرجى تعديل ملف channel_monitor.py وإضافة API_ID و API_HASH الخاصين بك.")
         return
         
-    # يمكن استخراج اسم البوت من التوكن إذا لم يتم تحديده
-    # ولكن يفضل أن يتم تحديده يدوياً في config.py أو هنا
-    
     # إنشاء العميل (Client)
-    # "my_account" هو اسم ملف الجلسة الذي سيتم إنشاؤه
     app = Client("my_account", api_id=API_ID, api_hash=API_HASH)
     
     # إضافة معالج الرسائل
+    # نستخدم filters.channel و filters.document لضمان التقاط المستندات من القناة فقط
+    # ونستخدم filters.chat(TARGET_CHANNEL_USERNAME) لفلترة القناة المستهدفة
     app.add_handler(
-        filters.chat(CHANNEL_USERNAME) & filters.document,
-        handle_channel_post
+        MessageHandler(handle_channel_post, filters.channel & filters.document & filters.chat(TARGET_CHANNEL_USERNAME))
     )
     
     logger.info("بدء تشغيل مراقب القناة (Pyrogram)...")

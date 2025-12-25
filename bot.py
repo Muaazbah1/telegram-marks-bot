@@ -109,8 +109,8 @@ async def handle_student_id(update: Update, context):
         student_id = update.message.text.strip()
         
         # التحقق من أن الرقم الجامعي يتكون من 9 أرقام (افتراض)
-        if not re.match(r"^\d{9}$", student_id):
-            await update.message.reply_text("الرقم الجامعي غير صحيح. يرجى إدخال 9 أرقام فقط.")
+        if not re.match(r"^\d{5}$", student_id):
+            await update.message.reply_text("الرقم الجامعي غير صحيح. يرجى إدخال 5 أرقام فقط.")
             return
             
         university = context.user_data.get('university')

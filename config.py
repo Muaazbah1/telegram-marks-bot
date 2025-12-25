@@ -22,7 +22,7 @@ MARKS_PDF_PATH = "marks.pdf" # المسار الذي سيتم حفظ ملف ال
 # إعدادات التحليل الإحصائي
 # يجب استبداله بمعرف القناة (Channel ID) التي سيرسل إليها البوت النتائج الإحصائية
 # يجب أن يكون المعرف على شكل -100xxxxxxxxxx
-STATISTICS_OUTPUT_CHANNEL_ID = -100123456789 
+STATISTICS_OUTPUT_CHANNEL_ID = -1003659935810 
 STATISTICS_OUTPUT_FILE = "Statistics_Report.md"
 NORMAL_DISTRIBUTION_IMAGE = "Normal_Distribution.png"
 

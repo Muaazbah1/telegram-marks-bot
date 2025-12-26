@@ -1,67 +1,102 @@
-# pdf_parser.py
-import fitz  # PyMuPDF
+# telegram_marks_bot/pdf_parser.py (التصحيح)
 import re
 import pandas as pd
+import fitz  # PyMuPDF
+import logging
+
+logger = logging.getLogger(__name__)
+
+# دالة لتحويل الأرقام العربية إلى لاتينية (تم إعادتها إلى المستوى الأعلى)
+def convert_arabic_to_latin(text):
+    """يحول الأرقام العربية (٠-٩) إلى أرقام لاتينية (0-9)."""
+    arabic_to_latin = str.maketrans('٠١٢٣٤٥٦٧٨٩', '0123456789')
+    return text.translate(arabic_to_latin)
 
 def parse_pdf_marks(pdf_path):
     """
-    يحلل ملف PDF ويستخرج العلامات على شكل قائمة من (الرقم الجامعي، العلامة).
+    يحلل ملف PDF لاستخراج الرقم الجامعي والعلامة النهائية وجميع الأعمدة.
     
-    الافتراض: ملف PDF يحتوي على جدول يمكن استخراج النص منه،
-    والعلامات مرتبة بشكل يمكن التعرف عليه، مثلاً:
-    [الاسم] [الرقم الجامعي] [العلامة]
-    
-    **ملاحظة هامة:** هذه الدالة تحتاج إلى تعديل دقيق بناءً على شكل ملف PDF الفعلي.
+    الافتراضات:
+    1. الرقم الجامعي (5 أرقام) هو العمود الثاني من اليمين.
+    2. العلامة النهائية هي العمود الثالث من اليسار.
+    3. يتم استخراج جميع الأعمدة كنصوص.
     """
     
-    doc = fitz.open(pdf_path)
-    all_data = []
+    marks_data = []
     
-    # تعبير منتظم للبحث عن الرقم الجامعي (9 أرقام) والعلامة (رقم عشري أو صحيح)
-    # هذا التعبير تقريبي ويجب تعديله ليتناسب مع شكل الجدول في ملف PDF
-    # مثال: البحث عن 5 أرقام متبوعة بمسافة ثم رقم (العلامة)
-    # regex = r"(\d{9})\s+([\d\.]+)"
-    
-    # بما أننا لا نعرف شكل الجدول، سنقوم باستخراج النص بالكامل ومحاولة تحليل الأسطر
-    
-    for page in doc:
-        text = page.get_text()
-        lines = text.split('\n')
+    try:
+        doc = fitz.open(pdf_path)
         
-        for line in lines:
-            # محاولة استخراج الرقم الجامعي (9 أرقام) والعلامة (رقم عشري أو صحيح)
-            # نفترض أن الرقم الجامعي يسبق العلامة في السطر
-            # هذا التعبير يحاول العثور على 5 أرقام (الرقم الجامعي) متبوعة بأي شيء، ثم رقم عشري أو صحيح (العلامة)
-            match = re.search(r"(\d{5}).*?([\d\.]+)", line)
+        # قائمة لتخزين رؤوس الأعمدة (إذا تم العثور عليها)
+        headers = []
+        
+        for page_num in range(doc.page_count):
+            page = doc.load_page(page_num)
+            text = page.get_text("text")
             
-            if match:
-                student_id = match.group(1)
-                mark_str = match.group(2)
+            # تقسيم النص إلى أسطر
+            lines = text.split('\n')
+            
+            for line in lines:
+                # تقسيم السطر إلى أعمدة (افتراضياً بالمسافات)
+                columns = line.split()
                 
-                try:
-                    mark = float(mark_str)
-                    all_data.append((student_id, mark))
-                except ValueError:
-                    # تجاهل إذا لم يكن الرقم الثاني علامة صالحة
+                if not columns:
                     continue
-    
-    doc.close()
-    
-    # إزالة التكرارات إذا وجدت
-    unique_data = list(set(all_data))
-    
-    return unique_data
+                    
+                # محاولة استخراج رؤوس الأعمدة من أول سطر غير فارغ
+                if not headers and any(re.search(r'[أ-ي]', col) for col in columns):
+                    headers = columns
+                    continue
+                
+                # يجب أن يكون هناك ما لا يقل عن 3 أعمدة (الاسم، الرقم الجامعي، العلامة النهائية)
+                if len(columns) < 3:
+                    continue
+                    
+                try:
+                    # 1. استخراج الرقم الجامعي (العمود الثاني من اليمين)
+                    # يجب أن يكون 5 أرقام
+                    student_id_raw = columns[-2]
+                    student_id_latin = convert_arabic_to_latin(student_id_raw)
+                    
+                    if not re.match(r"^\d{5}$", student_id_latin):
+                        continue # تجاهل إذا لم يكن 5 أرقام
+                        
+                    student_id = student_id_latin
+                    
+                    # 2. استخراج العلامة النهائية (العمود الثالث من اليسار)
+                    final_mark_raw = columns[2]
+                    final_mark_latin = convert_arabic_to_latin(final_mark_raw)
+                    final_mark = float(final_mark_latin)
+                    
+                    # 3. تخزين جميع الأعمدة الأصلية (بالعربية)
+                    marks_data.append({
+                        'student_id': student_id,
+                        'final_mark': final_mark,
+                        'all_columns': columns # تخزين جميع الأعمدة الأصلية
+                    })
+                    
+                except (ValueError, IndexError) as e:
+                    # تجاهل الأسطر التي لا يمكن تحليلها كبيانات علامات
+                    logger.debug(f"تجاهل السطر: {line} - خطأ: {e}")
+                    continue
+                    
+        doc.close()
+        
+        if not marks_data:
+            raise ValueError("لم يتم العثور على أي بيانات علامات صالحة في ملف PDF. يرجى التأكد من تنسيق الملف.")
+            
+        df = pd.DataFrame(marks_data)
+        return df, headers
+        
+    except Exception as e:
+        logger.error(f"خطأ عام أثناء تحليل PDF: {e}")
+        raise ValueError(f"خطأ عام أثناء تحليل PDF: {e}")
 
+# مثال للاستخدام (للتجربة فقط)
 if __name__ == '__main__':
-    # مثال للاستخدام والاختبار: يتطلب ملف PDF تجريبي
-    # بما أننا لا نملك ملف PDF تجريبي، سنكتفي بالدالة
-    print("دالة تحليل PDF جاهزة. تحتاج إلى ملف PDF تجريبي للاختبار الفعلي.")
-    
-    # مثال على شكل البيانات المتوقع إرجاعها:
-    # sample_data = [
-    #     ("202012345", 85.5),
-    #     ("202012346", 90.0),
-    #     ...
-    # ]
-    # print(parse_pdf_marks("marks.pdf"))
+    # يجب أن يكون لديك ملف PDF تجريبي هنا
+    # df, headers = parse_pdf_marks("path/to/your/marks.pdf")
+    # print(df.head())
+    # print(headers)
     pass

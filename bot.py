@@ -1,63 +1,14 @@
-# telegram_marks_bot/bot.py
+# bot.py
 import logging
 import os
 import re
 import pandas as pd
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackQueryHandler, ConversationHandler
-from config import TELEGRAM_BOT_TOKEN, ADMIN_IDS, STATISTICS_OUTPUT_CHANNEL_ID
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackQueryHandler
+from config import TELEGRAM_BOT_TOKEN, UNIVERSITIES, DB_NAME, MARKS_PDF_PATH, ADMIN_IDS, STATISTICS_OUTPUT_CHANNEL_ID, STATISTICS_OUTPUT_FILE, NORMAL_DISTRIBUTION_IMAGE
 from database import Database
-from pdf_parser import parse_pdf_marks, convert_arabic_to_latin
-from data_processor import process_marks_data, plot_normal_distribution
-from tabulate import tabulate
-# telegram_marks_bot/bot.py (التعديل)
-# ... (بقية الاستيرادات)
-from http.server import BaseHTTPRequestHandler, HTTPServer
-from threading import Thread
-# ...
-
-# ... (بقية الكود )
-
-# --- وظيفة خادم فحص الصحة ---
-class HealthCheckHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header('Content-type', 'text/plain')
-        self.end_headers()
-        self.wfile.write(b'OK')
-
-def run_health_check_server(port=8000):
-    """يشغل خادم HTTP بسيط للرد على فحص الصحة."""
-    server_address = ('0.0.0.0', port)
-    httpd = HTTPServer(server_address, HealthCheckHandler )
-    logger.info(f"بدء تشغيل خادم فحص الصحة على المنفذ {port}...")
-    httpd.serve_forever( )
-
-# ... (بقية الكود)
-
-def main():
-    """يبدأ تشغيل البوت."""
-    logger.info("بدء تشغيل البوت...")
-    
-    # 1. تشغيل خادم فحص الصحة في عملية منفصلة (Thread)
-    health_thread = Thread(target=run_health_check_server, daemon=True)
-    health_thread.start()
-    
-    # 2. إنشاء التطبيق
-    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
-    
-    # ... (بقية معالجات الأوامر)
-    
-    # 3. بدء البوت
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
-
-# ... (بقية الكود)
-
-try:
-    from fpdf import FPDF
-except ImportError:
-    logger.error("مكتبة fpdf2 غير مثبتة. يرجى تشغيل 'pip install fpdf2' أو التأكد من تحديث requirements.txt.")
-    exit()
+from pdf_parser import parse_pdf_marks
+from data_processor import process_marks_data, generate_normal_distribution_plot
 
 # إعداد التسجيل (Logging)
 logging.basicConfig(
@@ -66,310 +17,323 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # حالات المحادثة
-(SELECT_UNIVERSITY, SELECT_FACULTY, ENTER_STUDENT_ID) = range(3)
+SELECT_UNIVERSITY, SELECT_FACULTY, ENTER_STUDENT_ID = range(3)
 
 # قاعدة البيانات
 db = Database()
 
-# --- وظائف المساعدة ---
+# --- الدوال المساعدة ---
 
-def get_registration_keyboard():
+def get_university_keyboard():
     """ينشئ لوحة مفاتيح لاختيار الجامعة."""
-    keyboard = [
-        [InlineKeyboardButton("جامعة حلب", callback_data='uni_aleppo')],
-    ]
+    keyboard = []
+    for uni_name in UNIVERSITIES.keys():
+        keyboard.append([InlineKeyboardButton(uni_name, callback_data=f"uni_{uni_name}")])
     return InlineKeyboardMarkup(keyboard)
 
-def get_faculty_keyboard():
+def get_faculty_keyboard(university_name):
     """ينشئ لوحة مفاتيح لاختيار الكلية."""
-    keyboard = [
-        [InlineKeyboardButton("كلية الطب البشري", callback_data='fac_medicine')],
-    ]
+    keyboard = []
+    faculties = UNIVERSITIES.get(university_name, {})
+    for faculty_name, faculty_code in faculties.items():
+        keyboard.append([InlineKeyboardButton(faculty_name, callback_data=f"fac_{faculty_code}")])
     return InlineKeyboardMarkup(keyboard)
 
-# --- معالجات الأوامر ---
+# --- معالجات الأوامر والرسائل ---
 
-async def start(update: Update, context):
-    """يبدأ المحادثة ويطلب اختيار الجامعة."""
+async def start_command(update: Update, context):
+    """يرسل رسالة ترحيب ويطلب اختيار الجامعة."""
     user_id = update.effective_user.id
     
-    # التحقق مما إذا كان الطالب مسجلاً بالفعل
-    if db.get_student_registration(user_id):
+    # التحقق مما إذا كان الطالب مسجلاً مسبقاً
+    student_info = db.get_student_info(user_id)
+    if student_info and student_info[3] == 1: # is_registered == 1
         await update.message.reply_text(
-            "أهلاً بك مجدداً! أنت مسجل بالفعل. يمكنك استخدام الأمر /mark للحصول على علامتك فور صدورها."
+            f"أهلاً بك مجدداً يا {update.effective_user.first_name}!\n"
+            f"أنت مسجل حالياً لـ: {student_info[0]} - {student_info[1]} بالرقم الجامعي: {student_info[2]}\n"
+            "للحصول على نتيجتك، أرسل الأمر /mark."
         )
-        return ConversationHandler.END
-        
-    await update.message.reply_text(
-        "أهلاً بك في بوت العلامات. يرجى اختيار الجامعة:",
-        reply_markup=get_registration_keyboard()
-    )
-    return SELECT_UNIVERSITY
+        return
 
-async def button_callback(update: Update, context):
-    """يعالج ضغطات الأزرار المضمنة."""
+    # بدء عملية التسجيل
+    await update.message.reply_text(
+        "أهلاً بك في بوت العلامات! يرجى اختيار جامعتك لبدء التسجيل:",
+        reply_markup=get_university_keyboard()
+    )
+    # حفظ حالة المحادثة
+    context.user_data['state'] = SELECT_UNIVERSITY
+
+async def callback_query_handler(update: Update, context):
+    """يتعامل مع ضغطات الأزرار المضمنة (Inline Buttons)."""
     query = update.callback_query
     await query.answer()
     data = query.data
+    
     user_id = query.from_user.id
-    
-    if data.startswith('uni_'):
-        university = data.split('_')[1]
-        context.user_data['university'] = university
-        await query.edit_message_text(
-            f"تم اختيار: {university}. يرجى اختيار الكلية:",
-            reply_markup=get_faculty_keyboard()
-        )
-        return SELECT_FACULTY
-        
-    elif data.startswith('fac_'):
-        faculty = data.split('_')[1]
-        context.user_data['faculty'] = faculty
-        await query.edit_message_text(
-            f"تم اختيار: {faculty}. يرجى إرسال رقمك الجامعي (5 أرقام):"
-        )
-        return ENTER_STUDENT_ID
+    current_state = context.user_data.get('state')
 
-async def enter_student_id(update: Update, context):
-    """يعالج إدخال الرقم الجامعي ويحفظ التسجيل."""
+    if data.startswith("uni_") and current_state == SELECT_UNIVERSITY:
+        university_name = data.split("_")[1]
+        context.user_data['university'] = university_name
+        
+        # الانتقال لاختيار الكلية
+        await query.edit_message_text(
+            f"لقد اخترت: {university_name}\nالآن، يرجى اختيار كليتك:",
+            reply_markup=get_faculty_keyboard(university_name)
+        )
+        context.user_data['state'] = SELECT_FACULTY
+        
+    elif data.startswith("fac_") and current_state == SELECT_FACULTY:
+        faculty_code = data.split("_")[1]
+        
+        # البحث عن اسم الكلية من الكود
+        faculty_name = next((name for name, code in UNIVERSITIES.get(context.user_data['university'], {}).items() if code == faculty_code), "كلية غير معروفة")
+        
+        context.user_data['faculty'] = faculty_name
+        
+        # الانتقال لإدخال الرقم الجامعي
+        await query.edit_message_text(
+            f"لقد اخترت: {faculty_name}\nالآن، يرجى إرسال رقمك الجامعي (مثال: 202012345):"
+        )
+        context.user_data['state'] = ENTER_STUDENT_ID
+        
+    else:
+        await query.edit_message_text("حدث خطأ أو انتهت صلاحية هذا الخيار. يرجى البدء من جديد باستخدام /start.")
+
+async def handle_student_id(update: Update, context):
+    """يتعامل مع إدخال الرقم الجامعي."""
     user_id = update.effective_user.id
+    current_state = context.user_data.get('state')
     
-    # تحويل الأرقام العربية إلى لاتينية قبل التحقق
-    student_id = convert_arabic_to_latin(update.message.text.strip())
-    
-    # التحقق من أن الرقم الجامعي يتكون من 5 أرقام
-    if not re.match(r"^\d{5}$", student_id):
-        await update.message.reply_text("الرقم الجامعي غير صحيح. يرجى إدخال 5 أرقام فقط.")
-        return ENTER_STUDENT_ID
+    if current_state == ENTER_STUDENT_ID:
+        student_id = update.message.text.strip()
         
-    university = context.user_data.get('university')
-    faculty = context.user_data.get('faculty')
-    
-    # حفظ التسجيل في قاعدة البيانات
-    db.register_student(user_id, student_id, university, faculty)
-    
-    await update.message.reply_text(
-        f"تم تسجيلك بنجاح!\nالجامعة: {university}\nالكلية: {faculty}\nالرقم الجامعي: {student_id}\n\n"
-        "ستصلك رسالة بعلامتك فور صدورها. يمكنك استخدام الأمر /mark للاستعلام في أي وقت."
-    )
-    return ConversationHandler.END
+        # التحقق من أن الرقم الجامعي يتكون من 9 أرقام (افتراض)
+        if not re.match(r"^\d{5}$", student_id):
+            await update.message.reply_text("الرقم الجامعي غير صحيح. يرجى إدخال 5 أرقام فقط.")
+            return
+            
+        university = context.user_data.get('university')
+        faculty = context.user_data.get('faculty')
+        
+        # حفظ البيانات في قاعدة البيانات
+        if db.register_student(user_id, university, faculty, student_id):
+            await update.message.reply_text(
+                f"تم تسجيلك بنجاح!\n"
+                f"الجامعة: {university}\n"
+                f"الكلية: {faculty}\n"
+                f"الرقم الجامعي: {student_id}\n"
+                "فور صدور العلامات، سنرسل لك رسالة خاصة. يمكنك طلب نتيجتك في أي وقت باستخدام الأمر /mark."
+            )
+            # مسح حالة المحادثة
+            context.user_data['state'] = None
+        else:
+            await update.message.reply_text(
+                "عذراً، هذا الرقم الجامعي مسجل مسبقاً. يرجى التأكد من الرقم أو التواصل مع الدعم."
+            )
+    else:
+        # إذا لم يكن في حالة إدخال الرقم الجامعي، يتجاهل الرسالة أو يطلب /start
+        await update.message.reply_text("يرجى البدء باستخدام الأمر /start أولاً للتسجيل.")
 
-async def cancel(update: Update, context):
-    """يلغي عملية التسجيل."""
-    await update.message.reply_text("تم إلغاء عملية التسجيل.")
-    return ConversationHandler.END
-
-async def get_mark(update: Update, context):
+async def get_mark_command(update: Update, context):
     """يرسل علامة الطالب والتحليل الإحصائي الخاص به."""
     user_id = update.effective_user.id
     
-    # 1. التحقق من التسجيل
-    registration = db.get_student_registration(user_id)
-    if not registration:
-        await update.message.reply_text("أنت غير مسجل. يرجى استخدام الأمر /start للتسجيل أولاً.")
+    student_info = db.get_student_info(user_id)
+    if not student_info or student_info[3] == 0:
+        await update.message.reply_text("أنت غير مسجل. يرجى البدء بالتسجيل باستخدام الأمر /start.")
         return
         
-    student_id = registration[1]
-    
-    # 2. التحقق من وجود العلامة
+    student_id = student_info[2]
     mark_data = db.get_student_mark(student_id)
+    
     if not mark_data:
-        await update.message.reply_text("لم تصدر علامتك بعد. يرجى المحاولة لاحقاً.")
+        await update.message.reply_text("لم يتم إدخال العلامات بعد. يرجى المحاولة لاحقاً.")
         return
         
-    # 3. استخراج البيانات
-    final_mark = mark_data[1]
-    percentile = mark_data[2]
-    # all_columns هو سلسلة نصية تمثل قائمة الأعمدة، يجب تحويلها إلى قائمة
-    all_columns_str = mark_data[3]
-    # استخدام eval بحذر، أو استخدام طريقة أكثر أمانًا مثل json.loads إذا تم تخزينها كـ JSON
-    # بما أننا نستخدم sqlite، نفترض أنها مخزنة كسلسلة نصية قابلة للتحويل إلى قائمة
-    try:
-        all_columns = eval(all_columns_str)
-    except:
-        all_columns = [all_columns_str] # في حال فشل التحويل، نضع السلسلة كما هي
+    mark, percentile = mark_data
     
-    # 4. إنشاء رسالة مفصلة بجميع الأعمدة
-    
-    # تحويل قائمة الأعمدة إلى جدول tabulate
-    table_data = [
-        ["البيان", "القيمة"]
-    ]
-    
-    # إضافة جميع الأعمدة المستخرجة
-    # يمكننا افتراض أن العمود الأول هو الاسم، والثاني هو الرقم الجامعي، والثالث هو العلامة النهائية
-    # ولكن لضمان المرونة، سنعرضها كأعمدة مرقمة
-    for i, col_value in enumerate(all_columns):
-        table_data.append([f"العمود {i+1}", str(col_value)])
-        
-    # إضافة العلامة والـ percentile
-    table_data.append(["العلامة النهائية", f"{final_mark:.2f}"])
-    table_data.append(["الـ Percentile", f"{percentile:.2f}%"])
-    
-    mark_table = tabulate(table_data, headers="firstrow", tablefmt="fancy_grid", numalign="left", stralign="right")
-    
+    # 1. إرسال رسالة نصية
     message_text = (
-        f"🎉 **علامتك النهائية صدرت!** 🎉\n\n"
-        f"الرقم الجامعي: `{student_id}`\n\n"
-        f"```\n{mark_table}\n```\n\n"
-        f"موقعك الإحصائي: أنت أفضل من **{percentile:.2f}%** من زملائك."
+        f"🎉 تهانينا يا {update.effective_user.first_name}! 🎉\n"
+        f"رقمك الجامعي: {student_id}\n"
+        f"علامتك هي: **{mark:.2f}**\n"
+        f"موقعك الإحصائي (Percentile): **{percentile * 100:.2f}%**\n"
+        "هذا يعني أنك تتفوق على حوالي "
+        f"**{percentile * 100:.2f}%** من زملائك في هذا التوزيع."
     )
+    await update.message.reply_text(message_text, parse_mode='Markdown')
     
-    # 5. توليد صورة التوزيع الطبيعي الخاصة بالطالب
+    # 2. إرسال صورة التوزيع الطبيعي
     
-    # نحتاج إلى جميع العلامات لإنشاء الرسم البياني
+    # جلب جميع العلامات لرسم التوزيع
     all_marks_data = db.get_all_marks()
     if not all_marks_data:
-        await update.message.reply_text(message_text)
+        await update.message.reply_text("لا يمكن رسم التوزيع لعدم توفر بيانات العلامات الكافية.")
         return
         
-    # تحويل البيانات إلى DataFrame
-    df = pd.DataFrame(all_marks_data, columns=['student_id', 'final_mark', 'percentile', 'all_columns'])
+    # تحويل البيانات إلى الشكل المطلوب للمعالجة
+    marks_for_plot = [(row[0], row[1]) for row in all_marks_data]
     
-    # إنشاء مجلد مؤقت لحفظ الصور
-    temp_dir = "temp_plots"
-    os.makedirs(temp_dir, exist_ok=True)
+    # إنشاء DataFrame من البيانات
+    marks_df = pd.DataFrame(marks_for_plot, columns=['student_id', 'mark'])
     
-    # توليد الرسم البياني
-    plot_path = os.path.join(temp_dir, f"plot_{student_id}.png")
-    plot_normal_distribution(df['final_mark'], final_mark, plot_path)
+    # توليد الصورة الخاصة بالطالب
+    student_plot_path = f"plot_{student_id}.png"
+    generate_normal_distribution_plot(marks_df, mark, student_id, student_plot_path)
     
-    # 6. إرسال الرسالة والصورة
     await update.message.reply_photo(
-        photo=plot_path,
-        caption=message_text,
-        parse_mode='Markdown'
+        photo=student_plot_path,
+        caption="صورة توضح موقع علامتك من التوزيع الطبيعي للعلامات."
     )
     
-    # 7. تنظيف الملف المؤقت
-    os.remove(plot_path)
-    os.rmdir(temp_dir) # حذف المجلد المؤقت بعد الاستخدام
+    # حذف الصورة بعد إرسالها
+    os.remove(student_plot_path)
 
-async def handle_document(update: Update, context):
-    """يعالج ملفات PDF المرسلة من المشرف."""
+async def handle_pdf_upload(update: Update, context):
+    """يتعامل مع تحميل ملف PDF من قبل المشرف."""
     user_id = update.effective_user.id
     
-    # 1. التحقق من أن الملف هو PDF
-    if update.message.document.mime_type != 'application/pdf':
-        await update.message.reply_text("يرجى إرسال ملف PDF فقط.")
-        return
-        
-    # 2. التحقق من صلاحية المشرف (أو حساب Pyrogram المعاد توجيه الملف منه)
+    # التحقق من أن المستخدم هو مشرف
     if user_id not in ADMIN_IDS:
-        await update.message.reply_text("عذراً، لا تملك صلاحية معالجة ملفات العلامات.")
+        await update.message.reply_text("عذراً، لا تملك صلاحية رفع ملفات العلامات.")
         return
         
-    await update.message.reply_text("تم استلام ملف العلامات. جاري المعالجة...")
-    
-    # 3. تحميل الملف
-    file_id = update.message.document.file_id
-    new_file = await context.bot.get_file(file_id)
-    
-    temp_dir = "temp_files"
-    os.makedirs(temp_dir, exist_ok=True)
-    pdf_path = os.path.join(temp_dir, f"{file_id}.pdf")
-    
-    await new_file.download_to_drive(pdf_path)
-    
-    try:
-        # 4. تحليل ملف PDF
-        df, headers = parse_pdf_marks(pdf_path)
+    # التحقق من أن الملف المرفوع هو PDF
+    if update.message.document and update.message.document.mime_type == 'application/pdf':
+        file_id = update.message.document.file_id
+        new_file = await context.bot.get_file(file_id)
         
-        # 5. معالجة البيانات الإحصائية
-        db_data, stats, image_path, pdf_report_path = process_marks_data(df, temp_dir)
+        # تحميل الملف
+        await new_file.download_to_drive(MARKS_PDF_PATH)
+        await update.message.reply_text(f"تم تحميل ملف العلامات بنجاح. جاري تحليل البيانات...")
         
-        # 6. حفظ العلامات في قاعدة البيانات
-        db.save_marks(db_data)
-        
-        # 7. إرسال التقرير الإحصائي إلى القناة
-        
-        # إنشاء رسالة تلخيصية
-        summary_table = [
-            ["الإحصائية", "القيمة"],
-            ["المتوسط", f"{stats['Mean']:.2f}"],
-            ["الانحراف المعياري", f"{stats['Standard Deviation (SD)']:.2f}"],
-            ["العدد الكلي", f"{stats['Total Students']}"]
-        ]
-        summary_text = tabulate(summary_table, headers="firstrow", tablefmt="fancy_grid", numalign="left", stralign="right")
-        
-        caption = (
-            "📊 **تقرير التحليل الإحصائي لعلامات الطلاب** 📊\n\n"
-            f"```\n{summary_text}\n```\n\n"
-            "يرجى الاطلاع على الملف المرفق للحصول على التقرير الكامل وترتيب الطلاب."
-        )
-        
-        # إرسال التقرير كملف PDF
-        await context.bot.send_document(
-            chat_id=STATISTICS_OUTPUT_CHANNEL_ID,
-            document=pdf_report_path,
-            caption=caption,
-            parse_mode='Markdown'
-        )
-        
-        # 8. إرسال إشعار للمشرف
-        await update.message.reply_text(
-            "✅ **اكتملت المعالجة بنجاح!**\n\n"
-            f"تم تحليل {stats['Total Students']} علامة وحفظها في قاعدة البيانات.\n"
-            f"تم إرسال التقرير الإحصائي إلى القناة: {STATISTICS_OUTPUT_CHANNEL_ID}."
-        )
-        
-    except ValueError as e:
-        await update.message.reply_text(f"❌ خطأ أثناء معالجة ملف PDF: {e}")
-        logger.error(f"خطأ أثناء معالجة ملف PDF: {e}")
-    except Exception as e:
-        await update.message.reply_text(f"❌ حدث خطأ غير متوقع أثناء المعالجة: {e}")
-        logger.error(f"خطأ غير متوقع: {e}")
-    finally:
-        # 9. تنظيف الملفات المؤقتة
-        if os.path.exists(pdf_path):
-            os.remove(pdf_path)
-        if os.path.exists(image_path):
-            os.remove(image_path)
-        if os.path.exists(pdf_report_path):
-            os.remove(pdf_report_path)
-        if os.path.exists(temp_dir):
-            # محاولة حذف المجلد المؤقت
-            try:
-                os.rmdir(temp_dir)
-            except OSError:
-                # إذا لم يكن فارغاً، نتجاهل الخطأ
-                pass
+        try:
+            # 1. تحليل ملف PDF
+            marks_data = parse_pdf_marks(MARKS_PDF_PATH)
+            if not marks_data:
+                await update.message.reply_text("فشل تحليل ملف PDF. لم يتم العثور على علامات. يرجى مراجعة تنسيق الملف.")
+                return
+                
+            await update.message.reply_text(f"تم استخراج {len(marks_data)} علامة. جاري المعالجة الإحصائية...")
+            
+            # 2. المعالجة الإحصائية وحساب الـ percentiles
+            # process_marks_data ترجع (db_data, stats, report_path, general_plot_path)
+            db_data, stats, report_path, general_plot_path = process_marks_data(marks_data)
+            
+            # 3. حفظ البيانات في قاعدة البيانات
+            db.save_marks(db_data)
+            await update.message.reply_text("تم حفظ العلامات والتحليل الإحصائي في قاعدة البيانات بنجاح.")
+            
+            # 4. إرسال النتائج الإحصائية إلى قناة المشرف
+            
+            # إرسال التقرير النصي (Markdown)
+            await context.bot.send_document(
+                chat_id=STATISTICS_OUTPUT_CHANNEL_ID,
+                document=report_path,
+                caption="تقرير التحليل الإحصائي لعلامات الطلاب."
+            )
+            
+            # إرسال صورة التوزيع الطبيعي العام
+            await context.bot.send_photo(
+                chat_id=STATISTICS_OUTPUT_CHANNEL_ID,
+                photo=general_plot_path,
+                caption="صورة التوزيع الطبيعي العام للعلامات."
+            )
+            
+            # 5. إرسال العلامات الفردية للطلاب المسجلين
+            await update.message.reply_text("جاري إرسال العلامات الفردية للطلاب المسجلين...")
+            
+            registered_students = db.get_all_registered_students()
+            
+            # نحتاج إلى DataFrame كامل لحساب الـ percentile ورسم التوزيع لكل طالب
+            marks_df_full = pd.DataFrame(db_data, columns=['student_id', 'mark', 'percentile'])
+            
+            for telegram_id, student_id in registered_students:
+                # البحث عن علامة الطالب في DataFrame
+                student_row = marks_df_full[marks_df_full['student_id'] == student_id]
+                
+                if not student_row.empty:
+                    mark = student_row['mark'].iloc[0]
+                    percentile = student_row['percentile'].iloc[0]
+                    
+                    # توليد الصورة الخاصة بالطالب
+                    student_plot_path = f"plot_{student_id}.png"
+                    generate_normal_distribution_plot(marks_df_full, mark, student_id, student_plot_path)
+                    
+                    message_text = (
+                        f"🎉 صدرت علاماتك! 🎉\n"
+                        f"رقمك الجامعي: {student_id}\n"
+                        f"علامتك هي: **{mark:.2f}**\n"
+                        f"موقعك الإحصائي (Percentile): **{percentile * 100:.2f}%**"
+                    )
+                    
+                    try:
+                        await context.bot.send_message(
+                            chat_id=telegram_id,
+                            text=message_text,
+                            parse_mode='Markdown'
+                        )
+                        await context.bot.send_photo(
+                            chat_id=telegram_id,
+                            photo=student_plot_path,
+                            caption="صورة توضح موقع علامتك من التوزيع الطبيعي للعلامات."
+                        )
+                    except Exception as e:
+                        logger.error(f"فشل إرسال رسالة للطالب {telegram_id}: {e}")
+                        
+                    # حذف الصورة بعد إرسالها
+                    if os.path.exists(student_plot_path):
+                        os.remove(student_plot_path)
+                        
+            await update.message.reply_text("اكتمل إرسال العلامات الفردية للطلاب المسجلين.")
+            
+        except Exception as e:
+            logger.error(f"خطأ أثناء معالجة ملف PDF: {e}")
+            await update.message.reply_text(f"حدث خطأ أثناء معالجة الملف: {e}")
+            
+        finally:
+            # حذف ملف PDF بعد الانتهاء
+            if os.path.exists(MARKS_PDF_PATH):
+                os.remove(MARKS_PDF_PATH)
+                
+    else:
+        await update.message.reply_text("يرجى إرسال ملف PDF يحتوي على العلامات.")
+
+async def error_handler(update: Update, context):
+    """يسجل الأخطاء التي تسببها التحديثات."""
+    logger.error("حدث خطأ: %s", context.error)
+    if update and update.effective_message:
+        await update.effective_message.reply_text("عذراً، حدث خطأ غير متوقع. يرجى المحاولة لاحقاً.")
 
 def main():
     """يبدأ تشغيل البوت."""
-    logger.info("بدء تشغيل البوت...")
-    
-    # إنشاء التطبيق
+    if TELEGRAM_BOT_TOKEN == "YOUR_BOT_TOKEN_HERE":
+        logger.error("يرجى تعديل ملف config.py وإضافة TELEGRAM_BOT_TOKEN الخاص بك.")
+        return
+
+    # إنشاء التطبيق وتمرير التوكن
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+
+    # معالجات الأوامر
+    application.add_handler(CommandHandler("start", start_command))
+    application.add_handler(CommandHandler("mark", get_mark_command))
     
-    # معالج المحادثة للتسجيل
-    conv_handler = ConversationHandler(
-        entry_points=[CommandHandler("start", start)],
-        states={
-            SELECT_UNIVERSITY: [CallbackQueryHandler(button_callback, pattern='^uni_')],
-            SELECT_FACULTY: [CallbackQueryHandler(button_callback, pattern='^fac_')],
-            ENTER_STUDENT_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_student_id)],
-        },
-        fallbacks=[CommandHandler("cancel", cancel)],
-    )
+    # معالج الاستعلامات المضمنة (Inline Query)
+    application.add_handler(CallbackQueryHandler(callback_query_handler))
     
-    application.add_handler(conv_handler)
+    # معالج رسائل النص (لإدخال الرقم الجامعي)
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_student_id))
     
-    # معالج أمر الحصول على العلامة
-    application.add_handler(CommandHandler("mark", get_mark))
-    
-    # معالج ملفات PDF المرسلة من المشرف
-    application.add_handler(MessageHandler(filters.Document.ALL, handle_document))
-    
+    # معالج تحميل ملف PDF (للمشرفين)
+    application.add_handler(MessageHandler(filters.Document.ALL, handle_pdf_upload))
+
+    # معالج الأخطاء
+    application.add_error_handler(error_handler)
+
     # بدء البوت
+    logger.info("بدء تشغيل البوت...")
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == '__main__':
-    # التأكد من وجود مكتبة fpdf2
-    try:
-        from fpdf import FPDF
-    except ImportError:
-        logger.error("مكتبة fpdf2 غير مثبتة. يرجى تشغيل 'pip install fpdf2' أو التأكد من تحديث requirements.txt.")
-        exit()
-        
-  
+    main()

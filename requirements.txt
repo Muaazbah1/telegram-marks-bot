@@ -1,9 +1,9 @@
 python-telegram-bot
-pdfplumber  # لتحليل PDF
+pdfplumber
 pandas
 numpy
 matplotlib
 tabulate
 fpdf2
-pyrogram  # لمراقب القناة
+pyrogram[speedups]  # تم التعديل هنا
 scipy

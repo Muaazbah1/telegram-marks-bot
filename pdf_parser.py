@@ -29,8 +29,6 @@ def parse_pdf_marks(pdf_path):
     try:
         with pdfplumber.open(pdf_path) as pdf:
             for page in pdf.pages:
-                # استخراج الجداول من الصفحة
-                # استخدام إعدادات pdfplumber الافتراضية لاستخراج الجداول
                 tables = page.extract_tables()
                 
                 for table in tables:
@@ -45,24 +43,18 @@ def parse_pdf_marks(pdf_path):
                         if len(cleaned_row) < 3:
                             continue
                         
-                        # حسب السياق التقني:
-                        # - الرقم الجامعي (5 أرقام) في العمود الثاني من اليمين
-                        # - العلامة النهائية في العمود الثالث من اليسار
-                        
                         # 1. استخراج الرقم الجامعي (العمود الثاني من اليمين)
-                        # يجب أن يكون طول الصف على الأقل 2 ليكون هناك عمود ثاني من اليمين
                         if len(cleaned_row) >= 2:
                             student_id_str = cleaned_row[-2]
                             student_id_match = re.search(r'\b(\d{5})\b', student_id_str)
                         else:
-                            continue # تخطي الصف إذا كان قصيراً جداً
+                            continue
                         
-                        # 2. استخراج العلامة (العمود الثالث من اليسار)
-                        # يجب أن يكون طول الصف على الأقل 3 ليكون هناك عمود ثالث من اليسار
+                        # 2. استخراج العلامة (العمود الثالث من اليسار) - تم التأكيد على أن هذا هو الموقع الصحيح
                         if len(cleaned_row) >= 3:
                             mark_str = cleaned_row[2]
                         else:
-                            continue # تخطي الصف إذا كان قصيراً جداً
+                            continue
                         
                         
                         if student_id_match:
@@ -70,11 +62,15 @@ def parse_pdf_marks(pdf_path):
                             
                             # تنظيف وتحويل العلامة
                             try:
-                                # محاولة تحويل العلامة إلى رقم عائم (float)
                                 mark = float(mark_str)
-                                all_marks.append({'student_id': student_id, 'mark': mark})
+                                
+                                # **التعديل الجديد: تصفية العلامات التي تزيد عن 100**
+                                if mark <= 100:
+                                    all_marks.append({'student_id': student_id, 'mark': mark})
+                                else:
+                                    logger.warning(f"تم تجاهل علامة غير صالحة ({mark}) للطالب {student_id}")
+                                    
                             except ValueError:
-                                # تجاهل الصف إذا لم تكن العلامة رقماً صالحاً
                                 continue
                                 
     except Exception as e:

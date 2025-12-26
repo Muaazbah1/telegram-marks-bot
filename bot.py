@@ -71,6 +71,7 @@ async def handle_registration(update: Update, context: ContextTypes.DEFAULT_TYPE
             await update.message.reply_text('الرجاء إدخال رقم جامعي صحيح مكون من 5 أرقام فقط.')
 
 # معالجة ملفات PDF
+# معالجة ملفات PDF
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """يتعامل مع ملفات PDF المرسلة إلى البوت أو التي يتم إعادة توجيهها."""
     document = update.message.document
@@ -84,9 +85,10 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
     
     # تهيئة المتغيرات قبل كتلة try لمنع UnboundLocalError
-    image_path = None
-    pdf_report_path = None
-    general_plot_path = None
+    pdf_path = None
+    
+    # قائمة لتتبع جميع الملفات المؤقتة التي يجب حذفها
+    temp_files_to_clean = []
     
     try:
         # 1. تنزيل الملف
@@ -95,6 +97,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         
         # إنشاء مسار مؤقت للملف
         pdf_path = f'/tmp/{file_id}.pdf'
+        temp_files_to_clean.append(pdf_path)
         await new_file.download_to_drive(pdf_path)
         
         await update.message.reply_text('تم استلام الملف. جاري تحليل العلامات...')
@@ -129,6 +132,8 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 
                 # توليد الرسم البياني الفردي
                 image_path = f'/tmp/plot_{student_id}.png'
+                temp_files_to_clean.append(image_path) # إضافة مسار الصورة للتنظيف
+                
                 generate_normal_distribution_plot(marks_df['mark'], student_mark, image_path)
                 
                 # إرسال النتيجة للطالب (باللغة الإنجليزية لتجنب مشكلة التقطيع في الصورة)
@@ -144,12 +149,12 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 except TelegramError as e:
                     logger.error(f"Failed to send result to student {student_user_id}: {e}")
                 
-                # تنظيف ملف الصورة بعد الإرسال
+                # **التنظيف الفوري للملفات المؤقتة بعد إرسالها**
                 if os.path.exists(image_path):
                     os.remove(image_path)
-                    image_path = None # إعادة التعيين لمنع الحذف المزدوج في finally
+                    temp_files_to_clean.remove(image_path) # إزالته من قائمة التنظيف النهائية
 
-            # 5. إرسال الإحصائيات المجمعة إلى قناة الإدارة (تم إلغاء تقرير PDF الشامل مؤقتاً)
+            # 5. إرسال الإحصائيات المجمعة إلى قناة الإدارة
             if STATISTICS_OUTPUT_CHANNEL_ID:
                 stats = process_marks(marks_df)
                 
@@ -175,17 +180,11 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await update.message.reply_text(f'حدث خطأ أثناء معالجة الملف: {e}')
         
     finally:
-        # 6. تنظيف الملفات المؤقتة
-        if 'pdf_path' in locals() and os.path.exists(pdf_path):
-            os.remove(pdf_path)
-        
-        # استخدام المتغيرات المهيأة (image_path و pdf_report_path)
-        if image_path and os.path.exists(image_path):
-            os.remove(image_path)
-        if pdf_report_path and os.path.exists(pdf_report_path):
-            os.remove(pdf_report_path)
-        if general_plot_path and os.path.exists(general_plot_path):
-            os.remove(general_plot_path)
+        # 6. التنظيف النهائي لجميع الملفات المؤقتة المتبقية
+        for file_path in temp_files_to_clean:
+            if os.path.exists(file_path):
+                os.remove(file_path)
+                logger.info(f"تم تنظيف الملف المؤقت: {file_path}")
 
 
 def main() -> None:

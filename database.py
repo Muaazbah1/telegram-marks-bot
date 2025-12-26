@@ -24,17 +24,20 @@ def init_db():
         logger.error(f"خطأ في تهيئة قاعدة البيانات: {e}")
 
 def register_student(user_id, student_id, university, college):
-    """تسجيل طالب جديد في قاعدة البيانات."""
+    """تسجيل طالب جديد أو تحديث بياناته."""
     try:
         conn = sqlite3.connect(DB_NAME)
         cursor = conn.cursor()
+        
+        # استخدام INSERT OR REPLACE لضمان أن التسجيل يتم مرة واحدة فقط
+        # إذا كان user_id موجوداً، سيتم تحديث student_id
         cursor.execute(
             "INSERT OR REPLACE INTO students (user_id, student_id, university, college) VALUES (?, ?, ?, ?)",
             (user_id, student_id, university, college)
         )
         conn.commit()
         conn.close()
-        logger.info(f"تم تسجيل الطالب {student_id} بنجاح.")
+        logger.info(f"تم تسجيل/تحديث الطالب {student_id} بنجاح.")
     except Exception as e:
         logger.error(f"خطأ في تسجيل الطالب: {e}")
 

@@ -14,5 +14,5 @@ matplotlib==3.8.2
 
 pyrogram==2.0.106
 tqdm==4.66.2
-
+pdfplumber
 tabulate

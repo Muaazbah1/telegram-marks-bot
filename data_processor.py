@@ -185,4 +185,4 @@ def generate_full_report_pdf(marks_df, stats, plot_path, output_path):
     # إضافة الصورة
     pdf.image(plot_path, x=10, w=180)
     
-    pdf.output(output_path, 'F')
+    pdf.output(output_path)

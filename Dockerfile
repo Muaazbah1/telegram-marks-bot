@@ -17,4 +17,4 @@ COPY . .
 RUN chmod +x entrypoint.sh
 
 # الأمر الذي سيتم تنفيذه عند بدء تشغيل الحاوية
-CMD ["./entrypoint.sh"]
+CMD ["./start.sh"]

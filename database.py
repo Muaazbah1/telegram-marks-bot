@@ -104,7 +104,7 @@ class Database:
             return (student_id, final_mark, percentile, all_columns)
         return None
 
-       def get_all_marks(self):
+    def get_all_marks(self):
         """يسترجع جميع العلامات."""
         if not self.conn:
             return []

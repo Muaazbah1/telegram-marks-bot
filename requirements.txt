@@ -6,3 +6,4 @@ matplotlib
 tabulate
 pyrogram[speedups]
 fpdf2 # تمت الإضافة
+scipy

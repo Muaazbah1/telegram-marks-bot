@@ -29,33 +29,25 @@ def parse_pdf_marks(pdf_path):
     try:
         with pdfplumber.open(pdf_path) as pdf:
             for page in pdf.pages:
+                # استخدام إعدادات pdfplumber الافتراضية لاستخراج الجداول
                 tables = page.extract_tables()
                 
                 for table in tables:
                     # تخطي الصف الأول (رؤوس الأعمدة)
                     for row in table[1:]:
-                        if not row or len(row) < 3:
-                            continue
-                        
-                        # تنظيف الصف من القيم الفارغة وتحويل الأرقام العربية
+                        # تنظيف الصف وتحويل الأرقام العربية
                         cleaned_row = [convert_arabic_numbers(str(cell).strip()) for cell in row if cell is not None and str(cell).strip() != '']
                         
+                        # يجب أن يكون طول الصف على الأقل 3 لاستخراج العلامة والرقم الجامعي
                         if len(cleaned_row) < 3:
                             continue
                         
                         # 1. استخراج الرقم الجامعي (العمود الثاني من اليمين)
-                        if len(cleaned_row) >= 2:
-                            student_id_str = cleaned_row[-2]
-                            student_id_match = re.search(r'\b(\d{5})\b', student_id_str)
-                        else:
-                            continue
+                        student_id_str = cleaned_row[-2]
+                        student_id_match = re.search(r'\b(\d{5})\b', student_id_str)
                         
-                        # 2. استخراج العلامة (العمود الثالث من اليسار) - تم التأكيد على أن هذا هو الموقع الصحيح
-                        if len(cleaned_row) >= 3:
-                            mark_str = cleaned_row[2]
-                        else:
-                            continue
-                        
+                        # 2. استخراج العلامة (العمود الثالث من اليسار)
+                        mark_str = cleaned_row[2]
                         
                         if student_id_match:
                             student_id = student_id_match.group(1)
@@ -64,11 +56,9 @@ def parse_pdf_marks(pdf_path):
                             try:
                                 mark = float(mark_str)
                                 
-                                # **التعديل الجديد: تصفية العلامات التي تزيد عن 100**
-                                if mark <= 100:
+                                # تصفية العلامات التي تزيد عن 100
+                                if 0 <= mark <= 100:
                                     all_marks.append({'student_id': student_id, 'mark': mark})
-                                else:
-                                    logger.warning(f"تم تجاهل علامة غير صالحة ({mark}) للطالب {student_id}")
                                     
                             except ValueError:
                                 continue

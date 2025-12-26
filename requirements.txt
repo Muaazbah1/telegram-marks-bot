@@ -4,6 +4,5 @@ pandas
 numpy
 matplotlib
 tabulate
-fpdf2
-pyrogram[speedups]  # تم التعديل هنا
+pyrogram[speedups]
 scipy

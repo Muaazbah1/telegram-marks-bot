@@ -16,16 +16,15 @@ from io import BytesIO
 from config import TELEGRAM_BOT_TOKEN, STATISTICS_OUTPUT_CHANNEL_ID, UNIVERSITIES
 from database import init_db, register_student, get_student_info, get_all_students
 from pdf_parser import parse_pdf_marks
-from data_processor import process_marks, generate_normal_distribution_plot
+from data_processor import process_marks, generate_normal_distribution_plot, generate_full_report_pdf
 
 # استخراج أسماء الجامعة والكلية من القاموس (افتراضياً أول إدخال)
-# يجب التأكد من أن هذا هو الإعداد المطلوب
 UNIVERSITY_NAME = list(UNIVERSITIES.keys())[0]
 COLLEGE_NAME = list(UNIVERSITIES[UNIVERSITY_NAME].keys())[0]
 
 # تهيئة الخطوط لـ matplotlib لدعم اللغة العربية والأحرف الخاصة
-# هذا يحل مشكلة: Character "╒" at index 0 in text is outside the range...
-plt.rcParams['font.family'] = 'DejaVu Sans'
+# تم إبقاؤه هنا للتأكد من تهيئة matplotlib قبل أي استخدام
+plt.rcParams['font.family'] = 'sans-serif'
 plt.rcParams['font.sans-serif'] = ['DejaVu Sans']
 plt.rcParams['axes.unicode_minus'] = False
 
@@ -86,6 +85,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     # تهيئة المتغيرات قبل كتلة try لمنع UnboundLocalError
     image_path = None
     pdf_report_path = None
+    general_plot_path = None
     
     try:
         # 1. تنزيل الملف
@@ -126,45 +126,57 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 student_mark = row['mark']
                 student_id = row['student_id']
                 
-                # توليد الرسم البياني
+                # توليد الرسم البياني الفردي
                 image_path = f'/tmp/plot_{student_id}.png'
                 generate_normal_distribution_plot(marks_df['mark'], student_mark, image_path)
                 
-                # إرسال النتيجة للطالب
+                # إرسال النتيجة للطالب (باللغة الإنجليزية لتجنب مشكلة التقطيع في الصورة)
                 try:
                     await context.bot.send_photo(
                         chat_id=student_user_id,
                         photo=image_path,
-                        caption=f'نتيجتك في المادة:\n'
-                                f'الرقم الجامعي: {student_id}\n'
-                                f'العلامة: {student_mark}\n'
-                                f'موقعك على التوزيع الطبيعي يظهر في الصورة المرفقة.'
+                        caption=f'Your result in the subject:\n'
+                                f'Student ID: {student_id}\n'
+                                f'Mark: {student_mark}\n'
+                                f'Your position on the marks distribution is shown in the attached image.'
                     )
                 except TelegramError as e:
-                    logger.error(f"فشل إرسال النتيجة للطالب {student_user_id}: {e}")
+                    logger.error(f"Failed to send result to student {student_user_id}: {e}")
                 
                 # تنظيف ملف الصورة بعد الإرسال
                 if os.path.exists(image_path):
                     os.remove(image_path)
                     image_path = None # إعادة التعيين لمنع الحذف المزدوج في finally
 
-            # 5. إرسال الإحصائيات المجمعة إلى قناة الإدارة
+            # 5. إرسال الإحصائيات المجمعة وتقرير PDF إلى قناة الإدارة
             if STATISTICS_OUTPUT_CHANNEL_ID:
                 stats = process_marks(marks_df)
                 
-                stats_message = (
-                    f'**إحصائيات العلامات المجمعة:**\n'
-                    f'المتوسط الحسابي: {stats["mean"]:.2f}\n'
-                    f'الانحراف المعياري: {stats["std_dev"]:.2f}\n'
-                    f'الحد الأدنى: {stats["min"]}\n'
-                    f'الحد الأقصى: {stats["max"]}\n'
-                    f'عدد الطلاب: {stats["count"]}'
-                )
-                await context.bot.send_message(chat_id=STATISTICS_OUTPUT_CHANNEL_ID, text=stats_message)
+                # توليد الرسم البياني العام
+                general_plot_path = f'/tmp/general_plot.png'
+                # -1 لتجنب تلوين أي فئة في الرسم البياني العام
+                generate_normal_distribution_plot(marks_df['mark'], -1, general_plot_path) 
                 
-                await update.message.reply_text('تم توزيع النتائج الفردية وإرسال الإحصائيات المجمعة إلى قناة الإدارة.')
+                # توليد تقرير PDF الشامل
+                pdf_report_path = f'/tmp/marks_report.pdf'
+                generate_full_report_pdf(marks_df, stats, general_plot_path, pdf_report_path)
+                
+                # إرسال التقرير إلى قناة الإدارة
+                with open(pdf_report_path, 'rb') as f:
+                    await context.bot.send_document(
+                        chat_id=STATISTICS_OUTPUT_CHANNEL_ID, 
+                        document=f,
+                        caption="Comprehensive Marks Report (PDF)"
+                    )
+                
+                await update.message.reply_text('تم توزيع النتائج الفردية وإرسال التقرير الشامل إلى قناة الإدارة.')
+                
+                # تنظيف ملف الرسم البياني العام
+                if os.path.exists(general_plot_path):
+                    os.remove(general_plot_path)
+                
             else:
-                await update.message.reply_text('تم توزيع النتائج الفردية بنجاح. لم يتم إرسال إحصائيات مجمعة لعدم تحديد قناة الإدارة.')
+                await update.message.reply_text('تم توزيع النتائج الفردية بنجاح. لم يتم إرسال تقرير مجمع لعدم تحديد قناة الإدارة.')
         else:
             await update.message.reply_text('لا يوجد طلاب مسجلون في قاعدة البيانات لتوزيع العلامات عليهم.')
 

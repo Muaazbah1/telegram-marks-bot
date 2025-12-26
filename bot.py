@@ -10,6 +10,49 @@ from database import Database
 from pdf_parser import parse_pdf_marks, convert_arabic_to_latin
 from data_processor import process_marks_data, plot_normal_distribution
 from tabulate import tabulate
+# telegram_marks_bot/bot.py (التعديل)
+# ... (بقية الاستيرادات)
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from threading import Thread
+# ...
+
+# ... (بقية الكود )
+
+# --- وظيفة خادم فحص الصحة ---
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header('Content-type', 'text/plain')
+        self.end_headers()
+        self.wfile.write(b'OK')
+
+def run_health_check_server(port=8000):
+    """يشغل خادم HTTP بسيط للرد على فحص الصحة."""
+    server_address = ('0.0.0.0', port)
+    httpd = HTTPServer(server_address, HealthCheckHandler )
+    logger.info(f"بدء تشغيل خادم فحص الصحة على المنفذ {port}...")
+    httpd.serve_forever( )
+
+# ... (بقية الكود)
+
+def main():
+    """يبدأ تشغيل البوت."""
+    logger.info("بدء تشغيل البوت...")
+    
+    # 1. تشغيل خادم فحص الصحة في عملية منفصلة (Thread)
+    health_thread = Thread(target=run_health_check_server, daemon=True)
+    health_thread.start()
+    
+    # 2. إنشاء التطبيق
+    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    
+    # ... (بقية معالجات الأوامر)
+    
+    # 3. بدء البوت
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
+
+# ... (بقية الكود)
+
 try:
     from fpdf import FPDF
 except ImportError:

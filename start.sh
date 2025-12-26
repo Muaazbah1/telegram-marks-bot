@@ -1,8 +1,22 @@
 #!/bin/bash
 
-# تشغيل البوت الرسمي فقط في المقدمة
+# تشغيل البوت الرسمي في الخلفية
 echo "Starting Telegram Bot (bot.py)..."
-python bot.py
+python bot.py &
+BOT_PID=$! # حفظ معرف العملية
 
-# ملاحظة: تم إيقاف channel_monitor.py مؤقتاً لتحسين الأداء.
-# يجب إرسال ملفات PDF مباشرة إلى البوت.
+# تشغيل مراقب القناة في الخلفية
+echo "Starting Channel Monitor (channel_monitor.py)..."
+python channel_monitor.py &
+MONITOR_PID=$! # حفظ معرف العملية
+
+# الانتظار حتى تنتهي إحدى العمليتين
+wait -n
+
+# إذا توقفت إحدى العمليتين، قم بقتل الأخرى وإغلاق الحاوية
+echo "One of the processes stopped. Shutting down container."
+
+# قتل العملية الأخرى لضمان التنظيف
+kill $BOT_PID $MONITOR_PID
+
+exit 1

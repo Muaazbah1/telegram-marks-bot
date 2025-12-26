@@ -1,16 +1,20 @@
 import pandas as pd
 import numpy as np
-from scipy.stats import norm
 import matplotlib.pyplot as plt
 import os
-# تم إزالة استيراد NORMAL_DISTRIBUTION_IMAGE من config.py
-# لأن المسار يتم تمريره مباشرة إلى الدالة في bot.py
+from scipy.stats import norm # تم الاحتفاظ بها في حال الحاجة
+
+# تم تغيير الخطوط إلى الإنجليزية لتجنب مشكلة التقطيع
+# إذا كنت تريد المحاولة مرة أخرى باللغة العربية، يجب تثبيت خط عربي في Dockerfile
+# ولكن لتجنب التعقيد، سنستخدم الإنجليزية الآن كما طلبت
+# سنستخدم الإنجليزية في التسميات لتجنب مشكلة التقطيع
+# يجب تعديل bot.py أيضاً لتغيير تسميات الصورة إلى الإنجليزية
 
 def process_marks(marks_df):
     """
-    يحسب الإحصائيات الأساسية لمجموعة العلامات.
-    :param marks_df: DataFrame يحتوي على عمود 'mark'.
-    :return: قاموس بالإحصائيات.
+    Calculates basic statistics for the marks dataset.
+    :param marks_df: DataFrame with a 'mark' column.
+    :return: Dictionary with statistics.
     """
     marks = marks_df['mark']
     stats = {
@@ -24,42 +28,44 @@ def process_marks(marks_df):
 
 def generate_normal_distribution_plot(marks, student_mark, output_path):
     """
-    ينشئ رسم بياني للتوزيع الطبيعي مع تحديد موقع الطالب.
-    :param marks: سلسلة (Series) من العلامات.
-    :param student_mark: علامة الطالب المراد تحديدها.
-    :param output_path: المسار لحفظ ملف الصورة.
+    Generates a Histogram plot showing the distribution of marks and the student's position.
+    Y-axis is the count of students (Frequency).
+    X-axis is capped at 100.
+    :param marks: Series of marks.
+    :param student_mark: The student's mark to highlight.
+    :param output_path: Path to save the image file.
     """
-    # حساب المتوسط والانحراف المعياري
-    mu = marks.mean()
-    sigma = marks.std()
-
-    # إنشاء نطاق قيم لمحور السينات
-    x = np.linspace(marks.min() - 5, marks.max() + 5, 100)
-
-    # حساب دالة كثافة الاحتمال (PDF) للتوزيع الطبيعي
-    pdf = norm.pdf(x, mu, sigma)
+    
+    # إعدادات الخطوط بالإنجليزية
+    plt.rcParams['font.family'] = 'sans-serif'
+    plt.rcParams['font.sans-serif'] = ['DejaVu Sans']
+    plt.rcParams['axes.unicode_minus'] = False
 
     # إنشاء الرسم البياني
     plt.figure(figsize=(10, 6))
-    plt.plot(x, pdf, 'k', linewidth=2)
-
-    # تظليل المنطقة تحت المنحنى
-    plt.fill_between(x, pdf, color='skyblue', alpha=0.5)
+    
+    # **التعديل الجديد: استخدام مدرج تكراري (Histogram)**
+    # bins: عدد الفئات، range: تحديد النطاق من 0 إلى 100
+    n, bins, patches = plt.hist(marks, bins=20, range=(0, 100), edgecolor='black', alpha=0.7, color='skyblue')
 
     # تحديد موقع الطالب
-    student_pdf = norm.pdf(student_mark, mu, sigma)
-    plt.plot(student_mark, student_pdf, 'ro', markersize=10, label=f'علامتك: {student_mark}')
-    plt.axvline(student_mark, color='r', linestyle='--', linewidth=1)
+    # نجد الفئة التي تقع فيها علامة الطالب
+    for patch, bin_start, bin_end in zip(patches, bins[:-1], bins[1:]):
+        if bin_start <= student_mark < bin_end:
+            patch.set_facecolor('red') # تلوين فئة الطالب باللون الأحمر
+            break
+    
+    # إضافة خط عمودي عند علامة الطالب
+    plt.axvline(student_mark, color='red', linestyle='--', linewidth=2, label=f'Your Mark: {student_mark}')
 
-    # إضافة تسميات وعنوان
-    plt.title('توزيع العلامات الطبيعي', fontsize=16, fontweight='bold')
-    plt.xlabel('العلامة', fontsize=14)
-    plt.ylabel('الكثافة الاحتمالية', fontsize=14)
+    # إضافة تسميات وعنوان بالإنجليزية
+    plt.title('Marks Distribution Histogram', fontsize=16, fontweight='bold')
+    plt.xlabel('Mark', fontsize=14)
+    plt.ylabel('Number of Students (Frequency)', fontsize=14)
+    plt.xticks(np.arange(0, 101, 10)) # تحديد علامات المحور السيني كل 10
     plt.legend(loc='upper left', fontsize=12)
-    plt.grid(True, linestyle='--', alpha=0.6)
+    plt.grid(axis='y', linestyle='--', alpha=0.6)
 
     # حفظ الرسم البياني
     plt.savefig(output_path)
     plt.close()
-
-# لا حاجة لـ if __name__ == '__main__': هنا

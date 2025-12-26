@@ -1,199 +1,94 @@
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-import os
 from scipy.stats import norm
-from tabulate import tabulate
+import matplotlib.pyplot as plt
 from fpdf import FPDF
-# تم تبسيط الاستيراد لتجنب المشاكل
-# from fpdf.fonts import FontFace 
 import logging
+import io
+from database import get_all_students, get_student_info_by_id, update_student_name
 
 logger = logging.getLogger(__name__)
 
-# إعدادات الخطوط بالإنجليزية
-plt.rcParams['font.family'] = 'sans-serif'
+# إعداد الخط العربي لـ Matplotlib
+# تأكد من أن هذا الجزء يعمل بشكل صحيح مع الخطوط المثبتة في بيئة التشغيل
+plt.rcParams['font.family'] = 'DejaVu Sans'
 plt.rcParams['font.sans-serif'] = ['DejaVu Sans']
-plt.rcParams['axes.unicode_minus'] = False
+plt.rcParams['axes.unicode_minus'] = False # لدعم إشارة السالب
 
-# مسار الخط العربي (يجب أن يكون متوفراً بعد تثبيته في Dockerfile)
-ARABIC_FONT_PATH = "/usr/share/fonts/truetype/noto/NotoSansArabic-Regular.ttf"
+# ... (باقي الدوال مثل create_normal_distribution_plot و create_admin_report_pdf)
 
-class PDFReport(FPDF):
-    def header(self):
-        self.set_font('Arial', 'B', 15)
-        self.cell(0, 10, 'Marks Distribution Report', 0, 1, 'C')
-
-    def footer(self):
-        self.set_y(-15)
-        self.set_font('Arial', 'I', 8)
-        self.cell(0, 10, f'Page {self.page_no()}', 0, 0, 'C')
-
-def process_marks(marks_df):
+def process_grades(grades_data, course_name="المادة"):
     """
-    Calculates basic statistics for the marks dataset.
-    :param marks_df: DataFrame with a 'mark' column.
-    :return: Dictionary with statistics.
+    يعالج بيانات العلامات، ويحدث أسماء الطلاب في قاعدة البيانات،
+    ويجهز البيانات لإرسالها للطلاب ولتقرير المشرف.
     """
-    marks = marks_df['mark']
-    stats = {
-        'count': len(marks),
-        'mean': marks.mean(),
-        'std_dev': marks.std(),
-        'min': marks.min(),
-        'max': marks.max()
-    }
-    return stats
+    if not grades_data:
+        logger.warning("لا توجد بيانات علامات للمعالجة.")
+        return None, None
 
-def generate_normal_distribution_plot(marks, student_mark, output_path):
-    """
-    Generates a Histogram plot showing the distribution of marks and the student's position.
-    Y-axis is the count of students (Frequency).
-    X-axis is capped at 100.
-    :param marks: Series of marks.
-    :param student_mark: The student's mark to highlight.
-    :param output_path: Path to save the image file.
-    """
-    
-    # إعدادات الخطوط بالإنجليزية
-    plt.rcParams['font.family'] = 'sans-serif'
-    plt.rcParams['font.sans-serif'] = ['DejaVu Sans']
-    plt.rcParams['axes.unicode_minus'] = False
+    # 1. إنشاء DataFrame
+    df = pd.DataFrame(grades_data)
+    df['student_id'] = df['student_id'].astype(str)
+    df['grade'] = pd.to_numeric(df['grade'], errors='coerce')
+    df.dropna(subset=['grade'], inplace=True)
 
-    # إنشاء الرسم البياني
-    plt.figure(figsize=(8, 5)) # تقليل حجم الصورة
-    
-    # عمود لكل علامة (bins=101)
-    n, bins, patches = plt.hist(marks, bins=101, range=(0, 101), edgecolor='black', alpha=0.7, color='skyblue')
-
-    # تحديد موقع الطالب
-    # نجد الفئة التي تقع فيها علامة الطالب
-    for patch, bin_start, bin_end in zip(patches, bins[:-1], bins[1:]):
-        if bin_start <= student_mark < bin_end:
-            patch.set_facecolor('red') # تلوين فئة الطالب باللون الأحمر
-            break
-    
-    # إضافة خط عمودي عند علامة الطالب
-    if student_mark != -1: # لا ترسم الخط إذا كان الرسم البياني عاماً
-        plt.axvline(student_mark, color='red', linestyle='--', linewidth=2, label=f'Your Mark: {student_mark}')
-
-    # إضافة تسميات وعنوان بالإنجليزية
-    plt.title('Marks Distribution Histogram', fontsize=16, fontweight='bold')
-    plt.xlabel('Mark', fontsize=14)
-    plt.ylabel('Number of Students (Frequency)', fontsize=14)
-    plt.xticks(np.arange(0, 101, 10)) # تحديد علامات المحور السيني كل 10
-    plt.legend(loc='upper left', fontsize=12)
-    plt.grid(axis='y', linestyle='--', alpha=0.6)
-
-    # حفظ الرسم البياني - تم تقليل DPI إلى 75
-    plt.savefig(output_path, dpi=75)
-    plt.close()
-
-def generate_text_report(marks_df, stats):
-    """
-    ينشئ تقرير نصي منسق (Markdown) يحتوي على جدول الترتيب والإحصائيات.
-    """
-    # 1. الإحصائيات
-    stats_report = (
-        f"**1. Summary Statistics**\n"
-        f"| Metric | Value |\n"
-        f"| :--- | :--- |\n"
-        f"| Total Students | {stats['count']} |\n"
-        f"| Mean | {stats['mean']:.2f} |\n"
-        f"| Standard Deviation | {stats['std_dev']:.2f} |\n"
-        f"| Minimum Mark | {stats['min']} |\n"
-        f"| Maximum Mark | {stats['max']} |\n\n"
-    )
-
-    # 2. جدول الترتيب
-    # حساب الترتيب
-    ranked_df = marks_df.sort_values(by='mark', ascending=False).reset_index(drop=True)
-    ranked_df['Rank'] = ranked_df.index + 1
-    
-    # إعادة ترتيب الأعمدة
-    ranked_df = ranked_df[['Rank', 'student_id', 'mark']]
-    
-    # توليد جدول Markdown باستخدام tabulate
-    ranking_table = tabulate(ranked_df, headers='keys', tablefmt='pipe', showindex=False)
-    
-    ranking_report = (
-        f"**2. Student Ranking Table (Highest to Lowest)**\n"
-        f"{ranking_table}\n"
-    )
-    
-    return stats_report + ranking_report
-
-def generate_full_report_pdf(marks_df, stats, plot_path, output_path):
-    """
-    ينشئ تقرير PDF شامل يحتوي على الإحصائيات وجدول الترتيب والرسم البياني.
-    """
-    pdf = PDFReport('P', 'mm', 'A4')
-    
-    # إضافة الخط العربي
-    try:
-        # يجب أن يكون الخط العربي مثبتاً في Dockerfile
-        pdf.add_font('NotoSans', '', ARABIC_FONT_PATH, uni=True)
-        pdf.set_font('NotoSans', '', 10)
-    except Exception as e:
-        logger.error(f"Failed to load Arabic font: {e}")
-        # استخدام خط احتياطي إذا فشل تحميل الخط العربي
-        pdf.set_font('Arial', '', 10) 
+    # 2. تحديث أسماء الطلاب في قاعدة البيانات
+    for index, row in df.iterrows():
+        student_id = row['student_id']
+        student_name = row['student_name']
         
-    pdf.add_page()
+        if student_name and pd.notna(student_name):
+            # تحديث الاسم في قاعدة البيانات
+            update_student_name(student_id, student_name)
+
+    # 3. حساب الإحصائيات
+    mean_grade = df['grade'].mean()
+    std_dev = df['grade'].std()
     
-    # 1. الإحصائيات
-    pdf.set_font('Arial', 'B', 12)
-    pdf.cell(0, 10, '1. Summary Statistics', 0, 1, 'L')
+    # 4. حساب النسبة المئوية (Percentile)
+    df['percentile'] = df['grade'].rank(pct=True) * 100
+    df['percentile'] = df['percentile'].round(2)
+
+    # 5. دمج بيانات الطلاب المسجلين
+    registered_students = get_all_students()
+    registered_df = pd.DataFrame(registered_students, columns=['user_id', 'student_id', 'student_name_db', 'university', 'college'])
+    registered_df['student_id'] = registered_df['student_id'].astype(str)
+
+    # دمج البيانات: نستخدم الاسم المستخرج من PDF إذا كان موجوداً، وإلا نستخدم الاسم من قاعدة البيانات
+    merged_df = pd.merge(df, registered_df, on='student_id', how='left')
     
-    # تحويل الإحصائيات إلى جدول FPDF
-    stats_data = [
-        ['Metric', 'Value'],
-        ['Total Students', str(stats['count'])],
-        ['Mean', f"{stats['mean']:.2f}"],
-        ['Standard Deviation', f"{stats['std_dev']:.2f}"],
-        ['Minimum Mark', str(stats['min'])],
-        ['Maximum Mark', str(stats['max'])]
-    ]
+    # استخدام الاسم المستخرج من PDF إذا كان موجوداً، وإلا الاسم من قاعدة البيانات
+    merged_df['final_name'] = merged_df['student_name'].combine_first(merged_df['student_name_db'])
     
-    pdf.set_font('Arial', '', 10)
-    col_width = pdf.w / 3.0
-    row_height = 8
+    # 6. تجهيز بيانات تقرير المشرف (مع الترتيب والاسم)
+    admin_report_df = merged_df.sort_values(by='grade', ascending=False).reset_index(drop=True)
+    admin_report_df['Rank'] = admin_report_df.index + 1
     
-    for row in stats_data:
-        pdf.cell(col_width, row_height, row[0], 1, 0, 'L')
-        pdf.cell(col_width, row_height, row[1], 1, 1, 'L')
-    
-    pdf.ln(10)
-    
-    # 2. جدول الترتيب
-    pdf.set_font('Arial', 'B', 12)
-    pdf.cell(0, 10, '2. Student Ranking Table (Highest to Lowest)', 0, 1, 'L')
-    
-    # حساب الترتيب
-    ranked_df = marks_df.sort_values(by='mark', ascending=False).reset_index(drop=True)
-    ranked_df['Rank'] = ranked_df.index + 1
-    
-    # الأعمدة المطلوبة: Rank, student_id, mark
-    ranking_data = [
-        ['Rank', 'Student ID', 'Mark']
-    ] + ranked_df[['Rank', 'student_id', 'mark']].values.tolist()
-    
-    pdf.set_font('Arial', '', 10)
-    col_width = pdf.w / 4.0
-    row_height = 8
-    
-    for row in ranking_data:
-        pdf.cell(col_width, row_height, str(row[0]), 1, 0, 'C')
-        pdf.cell(col_width, row_height, str(row[1]), 1, 0, 'C')
-        pdf.cell(col_width, row_height, str(row[2]), 1, 1, 'C')
-        
-    pdf.ln(10)
-    
-    # 3. الرسم البياني
-    pdf.set_font('Arial', 'B', 12)
-    pdf.cell(0, 10, '3. Marks Distribution Histogram', 0, 1, 'L')
-    
-    # إضافة الصورة
-    pdf.image(plot_path, x=10, w=180)
-    
-    pdf.output(output_path)
+    # اختيار الأعمدة للتقرير
+    admin_report_data = admin_report_df[['Rank', 'student_id', 'final_name', 'grade', 'percentile']].rename(columns={
+        'Rank': 'الترتيب',
+        'student_id': 'الرقم الجامعي',
+        'final_name': 'اسم الطالب',
+        'grade': 'الدرجة',
+        'percentile': 'النسبة المئوية'
+    })
+
+    # 7. تجهيز بيانات الطلاب الفردية
+    student_results = {}
+    for index, row in merged_df.iterrows():
+        user_id = row['user_id']
+        if pd.notna(user_id):
+            student_results[int(user_id)] = {
+                'grade': row['grade'],
+                'percentile': row['percentile'],
+                'mean': mean_grade,
+                'std_dev': std_dev,
+                'all_grades': df['grade'].tolist()
+            }
+
+    # 8. إنشاء تقرير المشرف PDF
+    admin_pdf_buffer = create_admin_report_pdf(admin_report_data, mean_grade, std_dev, course_name)
+
+    return student_results, admin_pdf_buffer
+
+# ... (باقي الدوال)

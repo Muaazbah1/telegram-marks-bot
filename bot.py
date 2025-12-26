@@ -155,23 +155,41 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                     temp_files_to_clean.remove(image_path) # إزالته من قائمة التنظيف النهائية
 
             # 5. إرسال الإحصائيات المجمعة إلى قناة الإدارة
+            # 5. إرسال الإحصائيات المجمعة والتقرير النصي إلى قناة الإدارة
             if STATISTICS_OUTPUT_CHANNEL_ID:
                 stats = process_marks(marks_df)
                 
-                stats_message = (
-                    f'**Aggregated Marks Statistics:**\n'
-                    f'Mean: {stats["mean"]:.2f}\n'
-                    f'Standard Deviation: {stats["std_dev"]:.2f}\n'
-                    f'Min Mark: {stats["min"]}\n'
-                    f'Max Mark: {stats["max"]}\n'
-                    f'Total Students: {stats["count"]}'
-                )
-                await context.bot.send_message(chat_id=STATISTICS_OUTPUT_CHANNEL_ID, text=stats_message)
+                # توليد الرسم البياني العام
+                general_plot_path = f'/tmp/general_plot.png'
+                generate_normal_distribution_plot(marks_df['mark'], -1, general_plot_path) 
                 
-                await update.message.reply_text('تم توزيع النتائج الفردية وإرسال الإحصائيات المجمعة إلى قناة الإدارة.')
+                # توليد التقرير النصي
+                text_report = generate_text_report(marks_df, stats)
+                
+                # إرسال التقرير النصي
+                await context.bot.send_message(
+                    chat_id=STATISTICS_OUTPUT_CHANNEL_ID, 
+                    text=text_report,
+                    parse_mode='Markdown'
+                )
+                
+                # إرسال الرسم البياني العام
+                with open(general_plot_path, 'rb') as f:
+                    await context.bot.send_photo(
+                        chat_id=STATISTICS_OUTPUT_CHANNEL_ID,
+                        photo=f,
+                        caption="3. Marks Distribution Histogram"
+                    )
+                
+                await update.message.reply_text('تم توزيع النتائج الفردية وإرسال التقرير الشامل إلى قناة الإدارة.')
+                
+                # تنظيف ملف الرسم البياني العام
+                if os.path.exists(general_plot_path):
+                    os.remove(general_plot_path)
                 
             else:
                 await update.message.reply_text('تم توزيع النتائج الفردية بنجاح. لم يتم إرسال تقرير مجمع لعدم تحديد قناة الإدارة.')
+
         else:
             await update.message.reply_text('لا يوجد طلاب مسجلون في قاعدة البيانات لتوزيع العلامات عليهم.')
 

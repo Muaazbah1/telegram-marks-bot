@@ -14,7 +14,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # جعل ملف التشغيل قابلاً للتنفيذ
-RUN chmod +x entrypoint.sh
+RUN chmod +x start.sh
 
 # الأمر الذي سيتم تنفيذه عند بدء تشغيل الحاوية
 CMD ["./start.sh"]

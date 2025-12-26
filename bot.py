@@ -17,7 +17,7 @@ from config import TELEGRAM_BOT_TOKEN, STATISTICS_OUTPUT_CHANNEL_ID, UNIVERSITIE
 from database import init_db, register_student, get_student_info, get_all_students
 from pdf_parser import parse_pdf_marks
 # تم إزالة generate_full_report_pdf مؤقتاً
-from data_processor import process_marks, generate_normal_distribution_plot
+from data_processor import process_marks, generate_normal_distribution_plot, generate_text_report, generate_full_report_pdf
 
 # استخراج أسماء الجامعة والكلية من القاموس (افتراضياً أول إدخال)
 UNIVERSITY_NAME = list(UNIVERSITIES.keys())[0]

@@ -1,7 +1,8 @@
 python-telegram-bot
-pdfplumber  # تم إضافة المكتبة الجديدة
+pdfplumber  # لتحليل PDF
 pandas
 numpy
 matplotlib
 tabulate
 fpdf2
+pyrogram  # لمراقب القناة

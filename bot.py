@@ -14,7 +14,8 @@ from io import BytesIO
 # استيراد الوحدات المحلية
 # تم تعديل أسماء المتغيرات لتتوافق مع config.py
 from config import TELEGRAM_BOT_TOKEN, STATISTICS_OUTPUT_CHANNEL_ID, UNIVERSITIES
-from database import init_db, register_student, get_student_info, get_all_students
+from database import init_db, register_student, get_student_info, get_all_students, get_registration_state, set_registration_state, clear_registration_state
+
 from pdf_parser import parse_pdf_marks
 from data_processor import process_marks, generate_normal_distribution_plot, generate_text_report, generate_full_report_pdf
 

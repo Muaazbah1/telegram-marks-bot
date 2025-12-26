@@ -32,7 +32,41 @@ def init_db():
     except Exception as e:
         logger.error(f"خطأ في تهيئة قاعدة البيانات: {e}")
 
-# ... (باقي دوال تسجيل الطلاب تبقى كما هي)
+def register_student(user_id, student_id, student_name, university, college):
+    """تسجيل طالب جديد أو تحديث بياناته."""
+    try:
+        conn = sqlite3.connect(DB_NAME)
+        cursor = conn.cursor()
+        
+        # استخدام INSERT OR REPLACE لضمان أن التسجيل يتم مرة واحدة فقط
+        cursor.execute(
+            "INSERT OR REPLACE INTO students (user_id, student_id, student_name, university, college) VALUES (?, ?, ?, ?, ?)",
+            (user_id, student_id, student_name, university, college)
+        )
+        conn.commit()
+        conn.close()
+        logger.info(f"تم تسجيل/تحديث الطالب {student_id} ({student_name}) بنجاح.")
+    except Exception as e:
+        logger.error(f"خطأ في تسجيل الطالب: {e}")
+
+def get_student_info(student_id):
+    """الحصول على معلومات طالب معين."""
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute("SELECT user_id, student_name, university, college FROM students WHERE student_id = ?", (student_id,))
+    info = cursor.fetchone()
+    conn.close()
+    return info
+
+def get_all_students():
+    """الحصول على قائمة بجميع الطلاب المسجلين."""
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    # تم تعديل الاستعلام لإضافة student_name
+    cursor.execute("SELECT user_id, student_id, student_name, university, college FROM students")
+    students = cursor.fetchall()
+    conn.close()
+    return students
 
 # دوال جديدة للتعامل مع حالة التسجيل
 def get_registration_state(user_id):

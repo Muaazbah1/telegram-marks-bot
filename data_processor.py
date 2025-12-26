@@ -1,3 +1,30 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import os
+from scipy.stats import norm
+
+# إعدادات الخطوط بالإنجليزية
+plt.rcParams['font.family'] = 'sans-serif'
+plt.rcParams['font.sans-serif'] = ['DejaVu Sans']
+plt.rcParams['axes.unicode_minus'] = False
+
+def process_marks(marks_df):
+    """
+    Calculates basic statistics for the marks dataset.
+    :param marks_df: DataFrame with a 'mark' column.
+    :return: Dictionary with statistics.
+    """
+    marks = marks_df['mark']
+    stats = {
+        'count': len(marks),
+        'mean': marks.mean(),
+        'std_dev': marks.std(),
+        'min': marks.min(),
+        'max': marks.max()
+    }
+    return stats
+
 def generate_normal_distribution_plot(marks, student_mark, output_path):
     """
     Generates a Histogram plot showing the distribution of marks and the student's position.

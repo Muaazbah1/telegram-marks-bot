@@ -16,7 +16,6 @@ from io import BytesIO
 from config import TELEGRAM_BOT_TOKEN, STATISTICS_OUTPUT_CHANNEL_ID, UNIVERSITIES
 from database import init_db, register_student, get_student_info, get_all_students
 from pdf_parser import parse_pdf_marks
-# تم إزالة generate_full_report_pdf مؤقتاً
 from data_processor import process_marks, generate_normal_distribution_plot, generate_text_report, generate_full_report_pdf
 
 # استخراج أسماء الجامعة والكلية من القاموس (افتراضياً أول إدخال)
@@ -45,18 +44,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         f'مرحباً بك في نظام توزيع علامات {UNIVERSITY_NAME} - {COLLEGE_NAME}.\n'
         'الرجاء إرسال رقمك الجامعي (5 أرقام) للتسجيل.'
     )
-   # حالة التسجيل
-# حالة التسجيل
-REGISTRATION_STATE = {}
+    REGISTRATION_STATE[update.effective_user.id] = 'WAITING_FOR_ID'
 
 async def handle_registration(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """يتعامل مع عملية التسجيل."""
     user_id = update.effective_user.id
     text = update.message.text
 
-    # 1. التحقق مما إذا كان الطالب مسجلاً بالفعل في قاعدة البيانات
-    # بما أننا لا نعرف الرقم الجامعي، سنفترض أننا نعتمد على حالة التسجيل
-    
+    # 1. التحقق مما إذا كان المستخدم في حالة تسجيل
     if user_id not in REGISTRATION_STATE:
         # إذا لم يكن في حالة التسجيل، اطلب منه البدء
         await update.message.reply_text('الرجاء استخدام الأمر /start لبدء التسجيل.')
@@ -64,16 +59,16 @@ async def handle_registration(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     state = REGISTRATION_STATE[user_id]
 
+    # 2. معالجة حالة انتظار الرقم الجامعي
     if state == 'WAITING_FOR_ID':
         if text and len(text) == 5 and text.isdigit():
-            # التحقق مما إذا كان الرقم الجامعي مسجلاً بالفعل
-            # (هذا التحقق غير ممكن حالياً لأنه يتطلب دالة get_student_info_by_user_id)
-            
+            # الانتقال إلى حالة انتظار الاسم
             REGISTRATION_STATE[user_id] = {'state': 'WAITING_FOR_NAME', 'student_id': text}
             await update.message.reply_text('الآن، الرجاء إرسال اسمك الكامل.')
         else:
             await update.message.reply_text('الرجاء إدخال رقم جامعي صحيح مكون من 5 أرقام فقط.')
             
+    # 3. معالجة حالة انتظار الاسم
     elif state['state'] == 'WAITING_FOR_NAME':
         student_id = state['student_id']
         student_name = text
@@ -92,7 +87,6 @@ async def handle_registration(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
 
 # معالجة ملفات PDF
-# معالجة ملفات PDF
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """يتعامل مع ملفات PDF المرسلة إلى البوت أو التي يتم إعادة توجيهها."""
     document = update.message.document
@@ -104,6 +98,9 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     # إرسال حالة "جاري الكتابة"
     await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
+    
+    # **رسالة تحذيرية جديدة**
+    await update.message.reply_text('تم استلام الملف. **يرجى الانتظار، قد تستغرق عملية تحليل الملف عدة دقائق** بسبب حجم الملف وقيود الخادم.')
     
     # تهيئة المتغيرات قبل كتلة try لمنع UnboundLocalError
     pdf_path = None
@@ -121,7 +118,6 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         temp_files_to_clean.append(pdf_path)
         await new_file.download_to_drive(pdf_path)
         
-        await update.message.reply_text('تم استلام الملف. جاري تحليل العلامات...')
         await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
 
         # 2. تحليل العلامات
@@ -136,7 +132,8 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         
         if all_students:
             # دمج بيانات التسجيل مع العلامات
-            registered_students_df = pd.DataFrame(all_students, columns=['user_id', 'student_id', 'university', 'college'])
+            # تم تعديل هذا الجزء ليتضمن student_name
+            registered_students_df = pd.DataFrame(all_students, columns=['user_id', 'student_id', 'student_name', 'university', 'college'])
             registered_students_df['student_id'] = registered_students_df['student_id'].astype(str)
             
             merged_df = pd.merge(marks_df, registered_students_df, on='student_id', how='inner')
@@ -175,9 +172,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                     os.remove(image_path)
                     temp_files_to_clean.remove(image_path) # إزالته من قائمة التنظيف النهائية
 
-            # 5. إرسال الإحصائيات المجمعة إلى قناة الإدارة
-            # 5. إرسال الإحصائيات المجمعة والتقرير النصي إلى قناة الإدارة
-                        # 5. إرسال الإحصائيات المجمعة وتقرير PDF إلى قناة الإدارة
+            # 5. إرسال الإحصائيات المجمعة وتقرير PDF إلى قناة الإدارة
             if STATISTICS_OUTPUT_CHANNEL_ID:
                 stats = process_marks(marks_df)
                 
@@ -186,10 +181,14 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 temp_files_to_clean.append(general_plot_path)
                 generate_normal_distribution_plot(marks_df['mark'], -1, general_plot_path) 
                 
+                # دمج الاسم مع العلامات لتقرير PDF
+                report_df = pd.merge(marks_df, registered_students_df[['student_id', 'student_name']], on='student_id', how='left')
+                report_df['student_name'] = report_df['student_name'].fillna('غير مسجل')
+                
                 # توليد تقرير PDF الشامل
                 pdf_report_path = f'/tmp/report_{document.file_id}.pdf'
                 temp_files_to_clean.append(pdf_report_path)
-                generate_full_report_pdf(marks_df, stats, general_plot_path, pdf_report_path)
+                generate_full_report_pdf(report_df, stats, general_plot_path, pdf_report_path)
                 
                 # إرسال تقرير PDF
                 with open(pdf_report_path, 'rb') as f:
@@ -203,7 +202,6 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 
             else:
                 await update.message.reply_text('تم توزيع النتائج الفردية بنجاح. لم يتم إرسال تقرير مجمع لعدم تحديد قناة الإدارة.')
-
         else:
             await update.message.reply_text('لا يوجد طلاب مسجلون في قاعدة البيانات لتوزيع العلامات عليهم.')
 
@@ -234,38 +232,6 @@ def main() -> None:
 
     # بدء البوت
     logger.info("بدء تشغيل البوت...")
-        # **إضافة خادم HTTP بسيط لفحص الصحة (Health Check) لـ Koyeb**
-    # هذا يضمن أن Koyeb يعتبر التطبيق "سليماً"
-    import http.server
-    import socketserver
-    import threading
-
-    PORT = int(os.environ.get("PORT", 8080 )) # استخدام المنفذ المحدد بواسطة Koyeb
-
-    class HealthCheckHandler(http.server.SimpleHTTPRequestHandler ):
-        def do_GET(self):
-            if self.path == "/health":
-                self.send_response(200)
-                self.send_header("Content-type", "text/plain")
-                self.end_headers()
-                self.wfile.write(b"OK")
-            else:
-                self.send_response(404)
-                self.end_headers()
-
-    def start_health_server():
-        with socketserver.TCPServer(("", PORT), HealthCheckHandler) as httpd:
-            logger.info(f"Starting Health Check server on port {PORT}" )
-            httpd.serve_forever( )
-
-    # تشغيل خادم فحص الصحة في خيط منفصل
-    health_thread = threading.Thread(target=start_health_server)
-    health_thread.daemon = True
-    health_thread.start()
-    
-    # بدء البوت
-    logger.info("بدء تشغيل البوت...")
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == '__main__':

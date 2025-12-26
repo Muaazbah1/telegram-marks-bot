@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 from scipy.stats import norm
+from tabulate import tabulate # إضافة tabulate
 
 # إعدادات الخطوط بالإنجليزية
 plt.rcParams['font.family'] = 'sans-serif'
@@ -68,3 +69,37 @@ def generate_normal_distribution_plot(marks, student_mark, output_path):
     # حفظ الرسم البياني - تم تقليل DPI إلى 75
     plt.savefig(output_path, dpi=75)
     plt.close()
+
+def generate_text_report(marks_df, stats):
+    """
+    ينشئ تقرير نصي منسق (Markdown) يحتوي على جدول الترتيب والإحصائيات.
+    """
+    # 1. الإحصائيات
+    stats_report = (
+        f"**1. Summary Statistics**\n"
+        f"| Metric | Value |\n"
+        f"| :--- | :--- |\n"
+        f"| Total Students | {stats['count']} |\n"
+        f"| Mean | {stats['mean']:.2f} |\n"
+        f"| Standard Deviation | {stats['std_dev']:.2f} |\n"
+        f"| Minimum Mark | {stats['min']} |\n"
+        f"| Maximum Mark | {stats['max']} |\n\n"
+    )
+
+    # 2. جدول الترتيب
+    # حساب الترتيب
+    ranked_df = marks_df.sort_values(by='mark', ascending=False).reset_index(drop=True)
+    ranked_df['Rank'] = ranked_df.index + 1
+    
+    # إعادة ترتيب الأعمدة
+    ranked_df = ranked_df[['Rank', 'student_id', 'mark']]
+    
+    # توليد جدول Markdown باستخدام tabulate
+    ranking_table = tabulate(ranked_df, headers='keys', tablefmt='pipe', showindex=False)
+    
+    ranking_report = (
+        f"**2. Student Ranking Table (Highest to Lowest)**\n"
+        f"{ranking_table}\n"
+    )
+    
+    return stats_report + ranking_report

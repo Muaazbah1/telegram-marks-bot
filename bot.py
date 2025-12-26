@@ -16,7 +16,8 @@ from io import BytesIO
 from config import TELEGRAM_BOT_TOKEN, STATISTICS_OUTPUT_CHANNEL_ID, UNIVERSITIES
 from database import init_db, register_student, get_student_info, get_all_students
 from pdf_parser import parse_pdf_marks
-from data_processor import process_marks, generate_normal_distribution_plot, generate_full_report_pdf
+# تم إزالة generate_full_report_pdf مؤقتاً
+from data_processor import process_marks, generate_normal_distribution_plot
 
 # استخراج أسماء الجامعة والكلية من القاموس (افتراضياً أول إدخال)
 UNIVERSITY_NAME = list(UNIVERSITIES.keys())[0]
@@ -148,32 +149,21 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                     os.remove(image_path)
                     image_path = None # إعادة التعيين لمنع الحذف المزدوج في finally
 
-            # 5. إرسال الإحصائيات المجمعة وتقرير PDF إلى قناة الإدارة
+            # 5. إرسال الإحصائيات المجمعة إلى قناة الإدارة (تم إلغاء تقرير PDF الشامل مؤقتاً)
             if STATISTICS_OUTPUT_CHANNEL_ID:
                 stats = process_marks(marks_df)
                 
-                # توليد الرسم البياني العام
-                general_plot_path = f'/tmp/general_plot.png'
-                # -1 لتجنب تلوين أي فئة في الرسم البياني العام
-                generate_normal_distribution_plot(marks_df['mark'], -1, general_plot_path) 
+                stats_message = (
+                    f'**Aggregated Marks Statistics:**\n'
+                    f'Mean: {stats["mean"]:.2f}\n'
+                    f'Standard Deviation: {stats["std_dev"]:.2f}\n'
+                    f'Min Mark: {stats["min"]}\n'
+                    f'Max Mark: {stats["max"]}\n'
+                    f'Total Students: {stats["count"]}'
+                )
+                await context.bot.send_message(chat_id=STATISTICS_OUTPUT_CHANNEL_ID, text=stats_message)
                 
-                # توليد تقرير PDF الشامل
-                pdf_report_path = f'/tmp/marks_report.pdf'
-                generate_full_report_pdf(marks_df, stats, general_plot_path, pdf_report_path)
-                
-                # إرسال التقرير إلى قناة الإدارة
-                with open(pdf_report_path, 'rb') as f:
-                    await context.bot.send_document(
-                        chat_id=STATISTICS_OUTPUT_CHANNEL_ID, 
-                        document=f,
-                        caption="Comprehensive Marks Report (PDF)"
-                    )
-                
-                await update.message.reply_text('تم توزيع النتائج الفردية وإرسال التقرير الشامل إلى قناة الإدارة.')
-                
-                # تنظيف ملف الرسم البياني العام
-                if os.path.exists(general_plot_path):
-                    os.remove(general_plot_path)
+                await update.message.reply_text('تم توزيع النتائج الفردية وإرسال الإحصائيات المجمعة إلى قناة الإدارة.')
                 
             else:
                 await update.message.reply_text('تم توزيع النتائج الفردية بنجاح. لم يتم إرسال تقرير مجمع لعدم تحديد قناة الإدارة.')
@@ -194,6 +184,8 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             os.remove(image_path)
         if pdf_report_path and os.path.exists(pdf_report_path):
             os.remove(pdf_report_path)
+        if general_plot_path and os.path.exists(general_plot_path):
+            os.remove(general_plot_path)
 
 
 def main() -> None:

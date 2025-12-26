@@ -46,6 +46,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         'الرجاء إرسال رقمك الجامعي (5 أرقام) للتسجيل.'
     )
    # حالة التسجيل
+# حالة التسجيل
 REGISTRATION_STATE = {}
 
 async def handle_registration(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -53,9 +54,11 @@ async def handle_registration(update: Update, context: ContextTypes.DEFAULT_TYPE
     user_id = update.effective_user.id
     text = update.message.text
 
+    # 1. التحقق مما إذا كان الطالب مسجلاً بالفعل في قاعدة البيانات
+    # بما أننا لا نعرف الرقم الجامعي، سنفترض أننا نعتمد على حالة التسجيل
+    
     if user_id not in REGISTRATION_STATE:
-        # التحقق مما إذا كان الطالب مسجلاً بالفعل
-        # بما أننا لا نعرف الرقم الجامعي هنا، نعتمد على حالة التسجيل
+        # إذا لم يكن في حالة التسجيل، اطلب منه البدء
         await update.message.reply_text('الرجاء استخدام الأمر /start لبدء التسجيل.')
         return
 
@@ -63,6 +66,9 @@ async def handle_registration(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     if state == 'WAITING_FOR_ID':
         if text and len(text) == 5 and text.isdigit():
+            # التحقق مما إذا كان الرقم الجامعي مسجلاً بالفعل
+            # (هذا التحقق غير ممكن حالياً لأنه يتطلب دالة get_student_info_by_user_id)
+            
             REGISTRATION_STATE[user_id] = {'state': 'WAITING_FOR_NAME', 'student_id': text}
             await update.message.reply_text('الآن، الرجاء إرسال اسمك الكامل.')
         else:
@@ -72,15 +78,18 @@ async def handle_registration(update: Update, context: ContextTypes.DEFAULT_TYPE
         student_id = state['student_id']
         student_name = text
         
+        # التأكد من أننا نستخدم الدالة الجديدة التي تحفظ الاسم
         register_student(user_id, student_id, student_name, UNIVERSITY_NAME, COLLEGE_NAME)
+        
+        # بعد التسجيل الناجح، قم بمسح الحالة
         del REGISTRATION_STATE[user_id]
+        
         await update.message.reply_text(
             f'تم تسجيلك بنجاح:\n'
             f'الاسم: {student_name}\n'
             f'الرقم الجامعي: {student_id}\n'
             'ستصلك نتيجتك تلقائياً عند نشرها.'
         )
-
 
 # معالجة ملفات PDF
 # معالجة ملفات PDF

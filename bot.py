@@ -38,46 +38,56 @@ logger = logging.getLogger(__name__)
 REGISTRATION_STATE = {}
 
 # الأوامر
+# إزالة حالة التسجيل من الذاكرة
+# REGISTRATION_STATE = {}
+
+# الأوامر
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """يرسل رسالة ترحيب ويبدأ عملية التسجيل."""
+    # مسح أي حالة سابقة قبل البدء
+    clear_registration_state(update.effective_user.id)
+    
     await update.message.reply_text(
         f'مرحباً بك في نظام توزيع علامات {UNIVERSITY_NAME} - {COLLEGE_NAME}.\n'
         'الرجاء إرسال رقمك الجامعي (5 أرقام) للتسجيل.'
     )
-    REGISTRATION_STATE[update.effective_user.id] = 'WAITING_FOR_ID'
+    set_registration_state(update.effective_user.id, 'WAITING_FOR_ID')
 
 async def handle_registration(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """يتعامل مع عملية التسجيل."""
     user_id = update.effective_user.id
     text = update.message.text
 
-    # 1. التحقق مما إذا كان المستخدم في حالة تسجيل
-    if user_id not in REGISTRATION_STATE:
+    # الحصول على الحالة من قاعدة البيانات
+    state_data = get_registration_state(user_id)
+
+    if not state_data:
         # إذا لم يكن في حالة التسجيل، اطلب منه البدء
         await update.message.reply_text('الرجاء استخدام الأمر /start لبدء التسجيل.')
         return
 
-    state = REGISTRATION_STATE[user_id]
+    state = state_data['state']
+    student_id_temp = state_data['student_id']
 
     # 2. معالجة حالة انتظار الرقم الجامعي
     if state == 'WAITING_FOR_ID':
         if text and len(text) == 5 and text.isdigit():
             # الانتقال إلى حالة انتظار الاسم
-            REGISTRATION_STATE[user_id] = {'state': 'WAITING_FOR_NAME', 'student_id': text}
+            set_registration_state(user_id, 'WAITING_FOR_NAME', student_id=text)
             await update.message.reply_text('الآن، الرجاء إرسال اسمك الكامل.')
         else:
             await update.message.reply_text('الرجاء إدخال رقم جامعي صحيح مكون من 5 أرقام فقط.')
             
     # 3. معالجة حالة انتظار الاسم
-    elif state['state'] == 'WAITING_FOR_NAME':
-        student_id = state['student_id']
+    elif state == 'WAITING_FOR_NAME':
+        student_id = student_id_temp
         student_name = text
         
         # التأكد من أننا نستخدم الدالة الجديدة التي تحفظ الاسم
         register_student(user_id, student_id, student_name, UNIVERSITY_NAME, COLLEGE_NAME)
         
-        # بعد التسجيل الناجح، قم بمسح الحالة
-        del REGISTRATION_STATE[user_id]
+        # بعد التسجيل الناجح، قم بمسح الحالة من قاعدة البيانات
+        clear_registration_state(user_id)
         
         await update.message.reply_text(
             f'تم تسجيلك بنجاح:\n'
@@ -85,6 +95,7 @@ async def handle_registration(update: Update, context: ContextTypes.DEFAULT_TYPE
             f'الرقم الجامعي: {student_id}\n'
             'ستصلك نتيجتك تلقائياً عند نشرها.'
         )
+
 
 # معالجة ملفات PDF
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

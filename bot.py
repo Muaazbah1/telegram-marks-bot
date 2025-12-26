@@ -43,59 +43,61 @@ REGISTRATION_STATE = {}
 # REGISTRATION_STATE = {}
 
 # الأوامر
+# تأكد من أن هذا السطر في بداية bot.py تم تعديله لاستيراد الدوال الجديدة:
+# from database import init_db, register_student, get_student_info_by_user_id, get_student_info_by_id, get_all_students, update_student_name
+
+# ... (باقي الاستيرادات)
+
+# الأوامر
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """يرسل رسالة ترحيب ويبدأ عملية التسجيل."""
-    # مسح أي حالة سابقة قبل البدء
-    clear_registration_state(update.effective_user.id)
+    """يرسل رسالة ترحيب ويبدأ عملية التسجيل (خطوة واحدة: الرقم الجامعي)."""
+    user_id = update.effective_user.id
     
+    # التحقق مما إذا كان الطالب مسجلاً بالفعل
+    student_info = get_student_info_by_user_id(user_id)
+    if student_info:
+        student_id, student_name, _, _ = student_info
+        status_message = f'أنت مسجل بالفعل.\n'
+        status_message += f'الرقم الجامعي: {student_id}\n'
+        if student_name:
+            status_message += f'الاسم: {student_name}\n'
+        else:
+            status_message += 'لم يتم استخراج اسمك بعد من ملف العلامات.'
+        await update.message.reply_text(status_message)
+        return
+
     await update.message.reply_text(
         f'مرحباً بك في نظام توزيع علامات {UNIVERSITY_NAME} - {COLLEGE_NAME}.\n'
         'الرجاء إرسال رقمك الجامعي (5 أرقام) للتسجيل.'
     )
-    set_registration_state(update.effective_user.id, 'WAITING_FOR_ID')
 
 async def handle_registration(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """يتعامل مع عملية التسجيل."""
+    """يتعامل مع عملية التسجيل (خطوة واحدة: الرقم الجامعي)."""
     user_id = update.effective_user.id
     text = update.message.text
 
-    # الحصول على الحالة من قاعدة البيانات
-    state_data = get_registration_state(user_id)
-
-    if not state_data:
-        # إذا لم يكن في حالة التسجيل، اطلب منه البدء
-        await update.message.reply_text('الرجاء استخدام الأمر /start لبدء التسجيل.')
+    # التحقق مما إذا كان الطالب مسجلاً بالفعل
+    if get_student_info_by_user_id(user_id):
+        # إذا كان مسجلاً، تجاهل الرسالة أو أرسل رسالة تذكير
         return
 
-    state = state_data['state']
-    student_id_temp = state_data['student_id']
-
-    # 2. معالجة حالة انتظار الرقم الجامعي
-    if state == 'WAITING_FOR_ID':
-        if text and len(text) == 5 and text.isdigit():
-            # الانتقال إلى حالة انتظار الاسم
-            set_registration_state(user_id, 'WAITING_FOR_NAME', student_id=text)
-            await update.message.reply_text('الآن، الرجاء إرسال اسمك الكامل.')
-        else:
-            await update.message.reply_text('الرجاء إدخال رقم جامعي صحيح مكون من 5 أرقام فقط.')
-            
-    # 3. معالجة حالة انتظار الاسم
-    elif state == 'WAITING_FOR_NAME':
-        student_id = student_id_temp
-        student_name = text
+    # معالجة الرقم الجامعي
+    if text and len(text) == 5 and text.isdigit():
+        student_id = text
         
-        # التأكد من أننا نستخدم الدالة الجديدة التي تحفظ الاسم
-        register_student(user_id, student_id, student_name, UNIVERSITY_NAME, COLLEGE_NAME)
-        
-        # بعد التسجيل الناجح، قم بمسح الحالة من قاعدة البيانات
-        clear_registration_state(user_id)
+        # التسجيل في قاعدة البيانات (الاسم سيكون فارغاً مبدئياً)
+        register_student(user_id, student_id, UNIVERSITY_NAME, COLLEGE_NAME)
         
         await update.message.reply_text(
-            f'تم تسجيلك بنجاح:\n'
-            f'الاسم: {student_name}\n'
-            f'الرقم الجامعي: {student_id}\n'
-            'ستصلك نتيجتك تلقائياً عند نشرها.'
+            f'تم تسجيل رقمك الجامعي ({student_id}) بنجاح.\n'
+            'سيتم استخراج اسمك تلقائياً من ملف العلامات عند نشره.\n'
+            'ستصلك نتيجتك الفردية تلقائياً بعد معالجة الملف.'
         )
+    else:
+        await update.message.reply_text('الرجاء إدخال رقم جامعي صحيح مكون من 5 أرقام فقط.')
+
+# ... (تأكد من أن الدالة main() تستخدم handle_registration كـ MessageHandler)
+
 
 
 # معالجة ملفات PDF

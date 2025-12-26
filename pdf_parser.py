@@ -1,29 +1,30 @@
-# telegram_marks_bot/pdf_parser.py (باستخدام pdfplumber)
-import re
+import pdfplumber
 import pandas as pd
+import re
 import logging
-import pdfplumber # المكتبة الجديدة
-import json
 
 logger = logging.getLogger(__name__)
 
-# دالة لتحويل الأرقام العربية إلى لاتينية
-def convert_arabic_to_latin(text):
-    """يحول الأرقام العربية (٠-٩) إلى أرقام لاتينية (0-9)."""
-    arabic_to_latin = str.maketrans('٠١٢٣٤٥٦٧٨٩', '0123456789')
-    return text.translate(arabic_to_latin)
+# قاموس لتحويل الأرقام العربية إلى لاتينية
+ARABIC_TO_LATIN = {
+    '٠': '0', '١': '1', '٢': '2', '٣': '3', '٤': '4',
+    '٥': '5', '٦': '6', '٧': '7', '٨': '8', '٩': '9'
+}
+
+def convert_arabic_numbers(text):
+    """تحويل الأرقام العربية في النص إلى أرقام لاتينية."""
+    if isinstance(text, str):
+        for arabic, latin in ARABIC_TO_LATIN.items():
+            text = text.replace(arabic, latin)
+    return text
 
 def parse_pdf_marks(pdf_path):
     """
-    يحلل ملف PDF باستخدام pdfplumber لاستخراج العلامات من الجداول.
-    
-    الافتراضات:
-    1. الرقم الجامعي (5 أرقام) هو العمود الثاني من اليمين.
-    2. العلامة النهائية هي العمود الثالث من اليسار.
+    يحلل ملف PDF باستخدام pdfplumber لاستخراج أرقام الطلاب وعلاماتهم.
+    :param pdf_path: المسار إلى ملف PDF.
+    :return: DataFrame يحتوي على عمودين: 'student_id' و 'mark'.
     """
-    
-    marks_data = []
-    headers = []
+    all_marks = []
     
     try:
         with pdfplumber.open(pdf_path) as pdf:
@@ -32,53 +33,46 @@ def parse_pdf_marks(pdf_path):
                 tables = page.extract_tables()
                 
                 for table in tables:
-                    # افتراض أن الصف الأول هو رؤوس الأعمدة
-                    if not headers and table:
-                        headers = [str(h) for h in table[0] if h is not None]
-                        
-                    # معالجة الصفوف (بدءاً من الصف الثاني إذا كان هناك رؤوس)
-                    data_rows = table[1:] if headers else table
-                    
-                    for row in data_rows:
-                        # تصفية القيم الفارغة وتحويلها إلى سلاسل نصية
-                        columns = [str(col).strip() for col in row if col is not None]
-                        
-                        if len(columns) < 3:
+                    for row in table:
+                        if not row or len(row) < 3:
                             continue
+                        
+                        # تنظيف الصف من القيم الفارغة
+                        cleaned_row = [convert_arabic_numbers(str(cell).strip()) for cell in row if cell is not None and str(cell).strip() != '']
+                        
+                        if len(cleaned_row) < 3:
+                            continue
+                        
+                        # الترتيب المتوقع للأعمدة:
+                        # 1. الرقم الجامعي (5 أرقام) - العمود الثاني من اليمين
+                        # 2. العلامة النهائية - العمود الثالث من اليسار
+                        
+                        # البحث عن الرقم الجامعي (5 أرقام)
+                        # العمود الثاني من اليمين هو cleaned_row[-2]
+                        student_id_str = cleaned_row[-2]
+                        
+                        # البحث عن العلامة (قد تكون رقماً صحيحاً أو عشرياً)
+                        # العمود الثالث من اليسار هو cleaned_row[2]
+                        mark_str = cleaned_row[2]
+                        
+                        # تنظيف وتحويل الرقم الجامعي
+                        student_id_match = re.search(r'\b(\d{5})\b', student_id_str)
+                        
+                        if student_id_match:
+                            student_id = student_id_match.group(1)
                             
-                        try:
-                            # 1. استخراج الرقم الجامعي (العمود الثاني من اليمين)
-                            # يجب أن يكون 5 أرقام
-                            student_id_raw = columns[-2]
-                            student_id_latin = convert_arabic_to_latin(student_id_raw)
-                            
-                            if not re.match(r"^\d{5}$", student_id_latin):
-                                continue # تجاهل إذا لم يكن 5 أرقام
+                            # تنظيف وتحويل العلامة
+                            try:
+                                mark = float(mark_str)
+                                all_marks.append({'student_id': student_id, 'mark': mark})
+                            except ValueError:
+                                # قد يكون العمود الثالث ليس علامة، تجاهل هذا الصف
+                                continue
                                 
-                            student_id = student_id_latin
-                            
-                            # 2. استخراج العلامة النهائية (العمود الثالث من اليسار)
-                            final_mark_raw = columns[2]
-                            final_mark_latin = convert_arabic_to_latin(final_mark_raw)
-                            final_mark = float(final_mark_latin)
-                            
-                            # 3. تخزين جميع الأعمدة الأصلية
-                            marks_data.append({
-                                'student_id': student_id,
-                                'final_mark': final_mark,
-                                'all_columns': columns # تخزين جميع الأعمدة الأصلية
-                            })
-                            
-                        except (ValueError, IndexError) as e:
-                            logger.debug(f"تجاهل السطر: {row} - خطأ: {e}")
-                            continue
-                            
-        if not marks_data:
-            raise ValueError("لم يتم العثور على أي بيانات علامات صالحة في ملف PDF. يرجى التأكد من أن الملف يحتوي على جداول واضحة.")
-            
-        df = pd.DataFrame(marks_data)
-        return df, headers
-        
     except Exception as e:
-        logger.error(f"خطأ عام أثناء تحليل PDF: {e}")
-        raise ValueError(f"خطأ عام أثناء تحليل PDF: {e}")
+        logger.error(f"خطأ في تحليل ملف PDF: {e}")
+        return pd.DataFrame()
+
+    return pd.DataFrame(all_marks)
+
+# لا حاجة لـ if __name__ == '__main__': هنا

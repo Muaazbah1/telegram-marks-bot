@@ -1,70 +1,90 @@
 import pdfplumber
-import pandas as pd
 import re
 import logging
 
 logger = logging.getLogger(__name__)
 
-# قاموس لتحويل الأرقام العربية إلى لاتينية
-ARABIC_TO_LATIN = {
-    '٠': '0', '١': '1', '٢': '2', '٣': '3', '٤': '4',
-    '٥': '5', '٦': '6', '٧': '7', '٨': '8', '٩': '9'
-}
-
-def convert_arabic_numbers(text):
-    """تحويل الأرقام العربية في النص إلى أرقام لاتينية."""
-    if isinstance(text, str):
-        for arabic, latin in ARABIC_TO_LATIN.items():
-            text = text.replace(arabic, latin)
-    return text
-
-def parse_pdf_marks(pdf_path):
+def parse_grades_pdf(pdf_path):
     """
-    يحلل ملف PDF باستخدام pdfplumber لاستخراج أرقام الطلاب وعلاماتهم.
-    :param pdf_path: المسار إلى ملف PDF.
-    :return: DataFrame يحتوي على عمودين: 'student_id' و 'mark'.
+    يحلل ملف PDF للعلامات ويستخرج الرقم الجامعي، الاسم، والدرجة.
+    يفترض أن كل سطر يحتوي على: رقم جامعي (5 أرقام)، اسم الطالب، ودرجة (رقم).
     """
-    all_marks = []
+    grades_data = []
+    
+    # النمط العام للبحث عن سطر يحتوي على رقم جامعي (5 أرقام) ودرجة (رقم)
+    # هذا النمط يفترض أن الاسم يقع بين الرقم الجامعي والدرجة
+    # مثال: 12345 محمد علي 85
+    # سنستخدم نمطاً مرناً للبحث عن 5 أرقام متبوعة بنص متبوع برقم
+    # النمط: (\d{5}) - 5 أرقام (الرقم الجامعي)
+    # (.+?) - أي نص بينهما (الاسم)
+    # (\d{1,3}) - رقم من 1 إلى 3 خانات (الدرجة)
+    # قد تحتاج هذه الأنماط إلى تعديل دقيق بناءً على شكل ملف PDF الفعلي.
+    # سنستخدم نمطاً يركز على استخراج 5 أرقام، ثم النص، ثم رقم الدرجة.
+    # بما أننا لا نعرف التنسيق الدقيق، سنستخدم نمطاً عاماً ونقوم بالتنظيف لاحقاً.
+    
+    # النمط الأكثر أماناً: البحث عن 5 أرقام في بداية السطر أو بعد مسافة، متبوعة بنص، متبوعة برقم.
+    # بما أننا لا نعرف التنسيق الدقيق، سنعتمد على استخراج كل النص في السطر ثم محاولة فصله.
     
     try:
         with pdfplumber.open(pdf_path) as pdf:
             for page in pdf.pages:
-                # استخدام إعدادات pdfplumber الافتراضية لاستخراج الجداول
-                tables = page.extract_tables()
+                # استخراج النص من الصفحة
+                text = page.extract_text()
+                if not text:
+                    continue
                 
-                for table in tables:
-                    # تخطي الصف الأول (رؤوس الأعمدة)
-                    for row in table[1:]:
-                        # تنظيف الصف وتحويل الأرقام العربية
-                        cleaned_row = [convert_arabic_numbers(str(cell).strip()) for cell in row if cell is not None and str(cell).strip() != '']
+                # تقسيم النص إلى أسطر
+                lines = text.split('\n')
+                
+                for line in lines:
+                    # البحث عن الرقم الجامعي (5 أرقام) في السطر
+                    match_id = re.search(r'(\d{5})', line)
+                    if match_id:
+                        student_id = match_id.group(1)
                         
-                        # يجب أن يكون طول الصف على الأقل 3 لاستخراج العلامة والرقم الجامعي
-                        if len(cleaned_row) < 3:
-                            continue
+                        # محاولة استخراج الدرجة (نفترض أنها رقم صحيح)
+                        # نبحث عن رقم في نهاية السطر أو بعد مسافة كبيرة
+                        # هذا الجزء هو الأكثر صعوبة بدون معرفة التنسيق
                         
-                        # 1. استخراج الرقم الجامعي (العمود الثاني من اليمين)
-                        student_id_str = cleaned_row[-2]
-                        student_id_match = re.search(r'\b(\d{5})\b', student_id_str)
-                        
-                        # 2. استخراج العلامة (العمود الثالث من اليسار)
-                        mark_str = cleaned_row[2]
-                        
-                        if student_id_match:
-                            student_id = student_id_match.group(1)
+                        # مثال مبسط: نفترض أن الدرجة هي آخر رقم في السطر
+                        all_numbers = re.findall(r'\d+', line)
+                        if all_numbers:
+                            # نفترض أن الدرجة هي آخر رقم غير الرقم الجامعي
+                            grade = None
+                            for num in reversed(all_numbers):
+                                if num != student_id and len(num) <= 3: # الدرجة لا تزيد عن 3 خانات
+                                    grade = int(num)
+                                    break
                             
-                            # تنظيف وتحويل العلامة
-                            try:
-                                mark = float(mark_str)
+                            if grade is not None:
+                                # استخراج الاسم: إزالة الرقم الجامعي والدرجة من السطر
+                                # هذا الجزء يتطلب تنظيفاً دقيقاً
                                 
-                                # تصفية العلامات التي تزيد عن 100
-                                if 0 <= mark <= 100:
-                                    all_marks.append({'student_id': student_id, 'mark': mark})
+                                # إزالة الرقم الجامعي والدرجة من السطر للحصول على الاسم
+                                name_part = line.replace(student_id, '', 1)
+                                name_part = name_part.replace(str(grade), '', 1)
+                                
+                                # تنظيف الاسم من الأرقام والرموز الإضافية والمسافات الزائدة
+                                student_name = re.sub(r'[^ \u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]+', ' ', name_part).strip()
+                                
+                                # قد يكون الاسم فارغاً إذا كان التنسيق معقداً، لكن سنحاول
+                                if student_name:
+                                    grades_data.append({
+                                        'student_id': student_id,
+                                        'student_name': student_name,
+                                        'grade': grade
+                                    })
+                                else:
+                                    # إذا فشل استخراج الاسم، نسجل البيانات بدون اسم مؤقتاً
+                                    grades_data.append({
+                                        'student_id': student_id,
+                                        'student_name': None,
+                                        'grade': grade
+                                    })
+                                    logger.warning(f"فشل استخراج الاسم للرقم الجامعي {student_id} في السطر: {line}")
                                     
-                            except ValueError:
-                                continue
-                                
     except Exception as e:
         logger.error(f"خطأ في تحليل ملف PDF: {e}")
-        return pd.DataFrame()
+        return []
 
-    return pd.DataFrame(all_marks)
+    return grades_data

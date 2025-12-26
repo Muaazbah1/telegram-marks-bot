@@ -6,3 +6,4 @@ matplotlib
 tabulate
 fpdf2
 pyrogram  # لمراقب القناة
+scipy

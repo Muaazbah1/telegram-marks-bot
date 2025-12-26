@@ -104,11 +104,12 @@ class Database:
             return (student_id, final_mark, percentile, all_columns)
         return None
 
-    def get_all_marks(self):
+       def get_all_marks(self):
         """يسترجع جميع العلامات."""
         if not self.conn:
             return []
             
+        # يجب أن تكون الأعمدة المسترجعة هي الأربعة المطلوبة فقط
         self.cursor.execute("SELECT student_id, final_mark, percentile, all_columns FROM marks")
         results = self.cursor.fetchall()
         
@@ -119,9 +120,11 @@ class Database:
                 all_columns = json.loads(all_columns_json)
             except:
                 all_columns = all_columns_json
+            # هنا يتم إعادة 4 عناصر فقط
             processed_results.append((student_id, final_mark, percentile, all_columns))
             
         return processed_results
+
 
     def close(self):
         """يغلق الاتصال بقاعدة البيانات."""

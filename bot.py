@@ -202,6 +202,38 @@ def main() -> None:
 
     # بدء البوت
     logger.info("بدء تشغيل البوت...")
+        # **إضافة خادم HTTP بسيط لفحص الصحة (Health Check) لـ Koyeb**
+    # هذا يضمن أن Koyeb يعتبر التطبيق "سليماً"
+    import http.server
+    import socketserver
+    import threading
+
+    PORT = int(os.environ.get("PORT", 8080 )) # استخدام المنفذ المحدد بواسطة Koyeb
+
+    class HealthCheckHandler(http.server.SimpleHTTPRequestHandler ):
+        def do_GET(self):
+            if self.path == "/health":
+                self.send_response(200)
+                self.send_header("Content-type", "text/plain")
+                self.end_headers()
+                self.wfile.write(b"OK")
+            else:
+                self.send_response(404)
+                self.end_headers()
+
+    def start_health_server():
+        with socketserver.TCPServer(("", PORT), HealthCheckHandler) as httpd:
+            logger.info(f"Starting Health Check server on port {PORT}" )
+            httpd.serve_forever( )
+
+    # تشغيل خادم فحص الصحة في خيط منفصل
+    health_thread = threading.Thread(target=start_health_server)
+    health_thread.daemon = True
+    health_thread.start()
+    
+    # بدء البوت
+    logger.info("بدء تشغيل البوت...")
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == '__main__':

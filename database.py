@@ -1,104 +1,129 @@
-# database.py
+# telegram_marks_bot/database.py
 import sqlite3
-from config import DB_NAME
+import logging
+import json # لإدارة تخزين قائمة الأعمدة
+
+logger = logging.getLogger(__name__)
 
 class Database:
-    def __init__(self):
-        self.conn = sqlite3.connect(DB_NAME)
-        self.cursor = self.conn.cursor()
-        self.create_tables()
+    def __init__(self, db_name="bot_data.db"):
+        self.db_name = db_name
+        self.conn = None
+        self.cursor = None
+        self._connect()
+        self._create_tables()
 
-    def create_tables(self):
-        # جدول لتخزين بيانات تسجيل الطلاب
+    def _connect(self):
+        """يتصل بقاعدة البيانات."""
+        try:
+            self.conn = sqlite3.connect(self.db_name, check_same_thread=False)
+            self.cursor = self.conn.cursor()
+        except sqlite3.Error as e:
+            logger.error(f"خطأ في الاتصال بقاعدة البيانات: {e}")
+
+    def _create_tables(self):
+        """ينشئ الجداول المطلوبة."""
+        if not self.conn:
+            return
+            
+        # جدول لتسجيل الطلاب
         self.cursor.execute("""
             CREATE TABLE IF NOT EXISTS students (
-                telegram_id INTEGER PRIMARY KEY,
+                user_id INTEGER PRIMARY KEY,
+                student_id TEXT NOT NULL,
                 university TEXT,
-                faculty TEXT,
-                student_id TEXT UNIQUE,
-                is_registered INTEGER DEFAULT 0
+                faculty TEXT
             )
         """)
         
-        # جدول لتخزين العلامات والتحليل الإحصائي
+        # جدول لتخزين العلامات
+        # all_columns سيتم تخزينها كسلسلة JSON
         self.cursor.execute("""
             CREATE TABLE IF NOT EXISTS marks (
                 student_id TEXT PRIMARY KEY,
-                mark REAL,
+                final_mark REAL,
                 percentile REAL,
-                FOREIGN KEY (student_id) REFERENCES students(student_id)
+                all_columns TEXT
             )
         """)
         self.conn.commit()
 
-    def register_student(self, telegram_id, university, faculty, student_id):
-        """يسجل الطالب أو يحدث بياناته."""
-        try:
-            self.cursor.execute("""
-                INSERT OR REPLACE INTO students (telegram_id, university, faculty, student_id, is_registered)
-                VALUES (?, ?, ?, ?, 1)
-            """, (telegram_id, university, faculty, student_id))
-            self.conn.commit()
-            return True
-        except sqlite3.IntegrityError:
-            # قد يحدث هذا إذا كان الرقم الجامعي مسجلًا بالفعل لمعرف تليجرام آخر
-            return False
+    def register_student(self, user_id, student_id, university, faculty):
+        """يسجل طالب جديد أو يحدث تسجيل موجود."""
+        if not self.conn:
+            return
+            
+        self.cursor.execute("""
+            INSERT OR REPLACE INTO students (user_id, student_id, university, faculty)
+            VALUES (?, ?, ?, ?)
+        """, (user_id, student_id, university, faculty))
+        self.conn.commit()
 
-    def get_student_info(self, telegram_id):
-        """يسترجع معلومات التسجيل للطالب."""
-        self.cursor.execute("SELECT university, faculty, student_id, is_registered FROM students WHERE telegram_id = ?", (telegram_id,))
+    def get_student_registration(self, user_id):
+        """يسترجع تسجيل الطالب."""
+        if not self.conn:
+            return None
+            
+        self.cursor.execute("SELECT student_id, university, faculty FROM students WHERE user_id = ?", (user_id,))
         return self.cursor.fetchone()
-
-    def get_student_mark(self, student_id):
-        """يسترجع علامة الطالب والـ percentile."""
-        self.cursor.execute("SELECT mark, percentile FROM marks WHERE student_id = ?", (student_id,))
-        return self.cursor.fetchone()
-
-    def get_all_registered_students(self):
-        """يسترجع جميع الطلاب المسجلين الذين قاموا ببدء البوت."""
-        self.cursor.execute("SELECT telegram_id, student_id FROM students WHERE is_registered = 1")
-        return self.cursor.fetchall()
-
-    def get_all_marks(self):
-        """يسترجع جميع العلامات المخزنة مرتبة تنازلياً."""
-        self.cursor.execute("SELECT student_id, mark, percentile FROM marks ORDER BY mark DESC")
-        return self.cursor.fetchall()
 
     def save_marks(self, marks_data):
-        """
-        يحفظ العلامات في جدول marks.
-        marks_data هو قائمة من القوائم/الصفوف: [(student_id, mark, percentile), ...]
-        """
-        # مسح العلامات القديمة قبل إدخال الجديدة
-        self.cursor.execute("DELETE FROM marks")
-        self.conn.commit()
-        
-        # إدخال العلامات الجديدة
+        """يحفظ بيانات العلامات الجديدة."""
+        if not self.conn:
+            return
+            
+        # marks_data هي قائمة من الصفوف: (student_id, final_mark, percentile, all_columns)
+        data_to_insert = []
+        for row in marks_data:
+            student_id, final_mark, percentile, all_columns = row
+            # تحويل قائمة الأعمدة إلى سلسلة JSON قبل التخزين
+            all_columns_json = json.dumps(all_columns)
+            data_to_insert.append((student_id, final_mark, percentile, all_columns_json))
+            
         self.cursor.executemany("""
-            INSERT INTO marks (student_id, mark, percentile)
-            VALUES (?, ?, ?)
-        """, marks_data)
+            INSERT OR REPLACE INTO marks (student_id, final_mark, percentile, all_columns)
+            VALUES (?, ?, ?, ?)
+        """, data_to_insert)
         self.conn.commit()
-        return self.cursor.rowcount
+
+    def get_student_mark(self, student_id):
+        """يسترجع علامة طالب معين."""
+        if not self.conn:
+            return None
+            
+        self.cursor.execute("SELECT student_id, final_mark, percentile, all_columns FROM marks WHERE student_id = ?", (student_id,))
+        result = self.cursor.fetchone()
+        
+        if result:
+            # تحويل سلسلة JSON إلى قائمة عند الاسترجاع
+            student_id, final_mark, percentile, all_columns_json = result
+            try:
+                all_columns = json.loads(all_columns_json)
+            except:
+                all_columns = all_columns_json # في حال فشل التحويل
+            return (student_id, final_mark, percentile, all_columns)
+        return None
+
+    def get_all_marks(self):
+        """يسترجع جميع العلامات."""
+        if not self.conn:
+            return []
+            
+        self.cursor.execute("SELECT student_id, final_mark, percentile, all_columns FROM marks")
+        results = self.cursor.fetchall()
+        
+        # تحويل سلسلة JSON إلى قائمة عند الاسترجاع
+        processed_results = []
+        for student_id, final_mark, percentile, all_columns_json in results:
+            try:
+                all_columns = json.loads(all_columns_json)
+            except:
+                all_columns = all_columns_json
+            processed_results.append((student_id, final_mark, percentile, all_columns))
+            
+        return processed_results
 
     def close(self):
-        self.conn.close()
-
-if __name__ == '__main__':
-    # مثال للاستخدام والاختبار
-    db = Database()
-    print("Database and tables created successfully.")
-    
-    # تسجيل طالب تجريبي
-    db.register_student(123456789, "جامعة حلب", "كلية الطب البشري", "202012345")
-    print(f"Student info: {db.get_student_info(123456789)}")
-    
-    # حفظ علامات تجريبية
-    sample_marks = [
-        ("202012345", 85.5, 0.75), # الطالب المسجل
-        ("999999999", 90.0, 0.90)  # طالب غير مسجل (سيتم إدخاله في جدول marks)
-    ]
-    db.save_marks(sample_marks)
-    print(f"Mark for 202012345: {db.get_student_mark('202012345')}")
-    
-    db.close()
+        """يغلق الاتصال بقاعدة البيانات."""
+        if self.conn:
+            self.conn.close()

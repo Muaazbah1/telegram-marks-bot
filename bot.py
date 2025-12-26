@@ -12,10 +12,16 @@ from scipy.stats import norm
 from io import BytesIO
 
 # استيراد الوحدات المحلية
-from config import BOT_TOKEN, ADMIN_CHANNEL_ID, UNIVERSITY_NAME, COLLEGE_NAME
+# تم تعديل أسماء المتغيرات لتتوافق مع config.py
+from config import TELEGRAM_BOT_TOKEN, STATISTICS_OUTPUT_CHANNEL_ID, UNIVERSITIES
 from database import init_db, register_student, get_student_info, get_all_students
 from pdf_parser import parse_pdf_marks
 from data_processor import process_marks, generate_normal_distribution_plot
+
+# استخراج أسماء الجامعة والكلية من القاموس (افتراضياً أول إدخال)
+# يجب التأكد من أن هذا هو الإعداد المطلوب
+UNIVERSITY_NAME = list(UNIVERSITIES.keys())[0]
+COLLEGE_NAME = list(UNIVERSITIES[UNIVERSITY_NAME].keys())[0]
 
 # تهيئة الخطوط لـ matplotlib لدعم اللغة العربية والأحرف الخاصة
 # هذا يحل مشكلة: Character "╒" at index 0 in text is outside the range...
@@ -78,7 +84,6 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
     
     # تهيئة المتغيرات قبل كتلة try لمنع UnboundLocalError
-    # هذا يحل مشكلة: UnboundLocalError: cannot access local variable 'image_path'
     image_path = None
     pdf_report_path = None
     
@@ -144,7 +149,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                     image_path = None # إعادة التعيين لمنع الحذف المزدوج في finally
 
             # 5. إرسال الإحصائيات المجمعة إلى قناة الإدارة
-            if ADMIN_CHANNEL_ID:
+            if STATISTICS_OUTPUT_CHANNEL_ID:
                 stats = process_marks(marks_df)
                 
                 stats_message = (
@@ -155,7 +160,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                     f'الحد الأقصى: {stats["max"]}\n'
                     f'عدد الطلاب: {stats["count"]}'
                 )
-                await context.bot.send_message(chat_id=ADMIN_CHANNEL_ID, text=stats_message)
+                await context.bot.send_message(chat_id=STATISTICS_OUTPUT_CHANNEL_ID, text=stats_message)
                 
                 await update.message.reply_text('تم توزيع النتائج الفردية وإرسال الإحصائيات المجمعة إلى قناة الإدارة.')
             else:
@@ -185,7 +190,7 @@ def main() -> None:
     init_db()
     
     # إنشاء التطبيق وتمرير التوكن
-    application = Application.builder().token(BOT_TOKEN).build()
+    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 
     # إضافة المعالجات
     application.add_handler(CommandHandler("start", start))

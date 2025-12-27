@@ -72,9 +72,13 @@ def create_admin_report_pdf(admin_report_df, mean_grade, std_dev, course_name):
     # يجب التأكد من وجود هذه الخطوط في المسار المحدد
       # استخدام المسار المحلي للخطوط
     # استخدام خطوط Noto Sans التي تم تنزيلها كبديل
-    pdf.add_font('Noto', '', '/app/fonts/NotoSansArabic-Regular.ttf', uni=True)
-    pdf.add_font('Noto', 'B', '/app/fonts/NotoSansArabic-Bold.ttf', uni=True)
+  # ... داخل دالة create_admin_report_pdf
+    # استخدام خطوط Noto Sans التي تم تضمينها في مجلد fonts
+    pdf.add_font('Noto', '', 'fonts/NotoSansArabic-Regular.ttf', uni=True)
+    pdf.add_font('Noto', 'B', 'fonts/NotoSansArabic-Bold.ttf', uni=True)
     pdf.set_font('Noto', '', 12) # تغيير الخط الافتراضي إلى Noto
+# ...
+
 
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.alias_nb_pages()

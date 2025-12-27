@@ -1,4 +1,11 @@
 #!/bin/bash
+#!/bin/bash
+
+# تثبيت حزمة خطوط DejaVu لدعم اللغة العربية في تقارير PDF
+sudo apt-get update
+sudo apt-get install -y ttf-dejavu-core
+
+# ... (باقي أوامر بدء تشغيل البوت)
 
 # تشغيل البوت الرسمي في الخلفية
 echo "Starting Telegram Bot (bot.py)..."
@@ -12,8 +19,7 @@ MONITOR_PID=$! # حفظ معرف العملية
 #!/bin/bash
 
 # تثبيت حزمة خطوط DejaVu لدعم اللغة العربية في تقارير PDF
-sudo apt-get update
-sudo apt-get install -y ttf-dejavu-core
+
 
 # ... (باقي أوامر بدء تشغيل البوت)
 

@@ -33,8 +33,8 @@ def create_grades_histogram(grades, student_grade):
     """
     fig, ax = plt.subplots(figsize=(8, 5))
     
-    # رسم مخطط الأعمدة
-    ax.hist(grades, bins=10, edgecolor='black', alpha=0.7, color='skyblue')
+    # رسم مخطط الأعمدة (تم تحديد 100 عمود ونطاق من 0 إلى 100)
+    ax.hist(grades, bins=100, range=(0, 100), edgecolor='black', alpha=0.7, color='skyblue')
     
     # وضع علامة على درجة الطالب
     ax.axvline(student_grade, color='red', linestyle='--', linewidth=2, label=fix_arabic(f'درجتك: {student_grade}'))

@@ -70,8 +70,10 @@ def create_admin_report_pdf(admin_report_df, mean_grade, std_dev, course_name):
     # FPDF يتطلب إضافة الخط يدوياً
     pdf = PDF('P', 'mm', 'A4')
     # يجب التأكد من وجود هذه الخطوط في المسار المحدد
-    pdf.add_font('DejaVu', '', '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', uni=True)
-    pdf.add_font('DejaVu', 'B', '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', uni=True)
+      # استخدام المسار المحلي للخطوط
+    pdf.add_font('DejaVu', '', '/app/fonts/DejaVuSans.ttf', uni=True)
+    pdf.add_font('DejaVu', 'B', '/app/fonts/DejaVuSans-Bold.ttf', uni=True)
+
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.alias_nb_pages()
     pdf.add_page()

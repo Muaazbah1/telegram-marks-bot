@@ -71,8 +71,10 @@ def create_admin_report_pdf(admin_report_df, mean_grade, std_dev, course_name):
     pdf = PDF('P', 'mm', 'A4')
     # يجب التأكد من وجود هذه الخطوط في المسار المحدد
       # استخدام المسار المحلي للخطوط
-    pdf.add_font('DejaVu', '', '/app/fonts/DejaVuSans.ttf', uni=True)
-    pdf.add_font('DejaVu', 'B', '/app/fonts/DejaVuSans-Bold.ttf', uni=True)
+    # استخدام خطوط Noto Sans التي تم تنزيلها كبديل
+    pdf.add_font('Noto', '', '/app/fonts/NotoSansArabic-Regular.ttf', uni=True)
+    pdf.add_font('Noto', 'B', '/app/fonts/NotoSansArabic-Bold.ttf', uni=True)
+    pdf.set_font('Noto', '', 12) # تغيير الخط الافتراضي إلى Noto
 
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.alias_nb_pages()

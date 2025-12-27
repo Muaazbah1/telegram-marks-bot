@@ -1,11 +1,19 @@
 #!/bin/bash
-#!/bin/bash
 
-# تثبيت حزمة خطوط DejaVu لدعم اللغة العربية في تقارير PDF
+# 1. تثبيت حزمة الخطوط
 sudo apt-get update
 sudo apt-get install -y ttf-dejavu-core
 
+# 2. إنشاء مجلد محلي للخطوط
+mkdir -p /app/fonts
+
+# 3. نسخ الخطوط المطلوبة إلى المجلد المحلي
+# المسار الافتراضي لخطوط DejaVu بعد التثبيت
+cp /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf /app/fonts/
+cp /usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf /app/fonts/
+
 # ... (باقي أوامر بدء تشغيل البوت)
+
 
 # تشغيل البوت الرسمي في الخلفية
 echo "Starting Telegram Bot (bot.py)..."

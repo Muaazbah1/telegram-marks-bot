@@ -1,36 +1,31 @@
 #!/bin/bash
 
-# 1. إنشاء مجلد محلي للخطوط
+# --- مرحلة الإعداد: تثبيت الخطوط وضمان وجودها ---
+
+# 1. تثبيت الأدوات الأساسية (curl) وحزمة الخطوط
+# نستخدم أمر واحد لضمان التثبيت
+sudo apt-get update
+sudo apt-get install -y curl ttf-dejavu-core
+
+# 2. إنشاء مجلد محلي للخطوط
 mkdir -p /app/fonts
 
-# 2. تنزيل الخطوط مباشرة إلى المجلد المحلي
-# نستخدم خطوط Noto Sans العربية كبديل موثوق به ويدعم Unicode بشكل ممتاز
-# إذا كان خط DejaVu هو المطلوب تحديداً، يمكن تنزيله أيضاً، لكن Noto Sans هو الأفضل للويب.
-# سنلتزم بـ DejaVu حالياً لتجنب تغيير الكود في data_processor.py
-
-# تنزيل خطوط DejaVu (نستخدم رابط مباشر لمصدر موثوق)
-# ملاحظة: هذا الرابط قد يتغير، لكنه يمثل طريقة التنزيل المباشر
-# سنستخدم طريقة التثبيت عبر apt-get مرة أخرى، ولكن سنضيف أمر التحقق من المسار.
-
-# الطريقة الأفضل: التأكد من التثبيت ثم النسخ
-sudo apt-get update
-sudo apt-get install -y ttf-dejavu-core
-
-# التحقق من وجود الخطوط قبل النسخ
+# 3. محاولة نسخ خطوط DejaVu (المسار الأصلي)
 if [ -f /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf ]; then
     cp /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf /app/fonts/
     cp /usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf /app/fonts/
     echo "تم نسخ خطوط DejaVu بنجاح."
 else
-    echo "خطأ: لم يتم العثور على خطوط DejaVu في المسار المتوقع."
-    # كحل بديل، سنقوم بتنزيل خطوط Noto Sans (وهي بديل ممتاز للعربية)
-    wget -O /app/fonts/NotoSansArabic-Regular.ttf https://github.com/googlefonts/noto-fonts/raw/main/hinted/ttf/NotoSansArabic/NotoSansArabic-Regular.ttf
-    wget -O /app/fonts/NotoSansArabic-Bold.ttf https://github.com/googlefonts/noto-fonts/raw/main/hinted/ttf/NotoSansArabic/NotoSansArabic-Bold.ttf
+    echo "خطأ: لم يتم العثور على خطوط DejaVu في المسار المتوقع. محاولة تنزيل Noto Sans كبديل."
+    # 4. تنزيل خطوط Noto Sans كبديل باستخدام curl (أكثر موثوقية من wget)
+    curl -L -o /app/fonts/NotoSansArabic-Regular.ttf https://github.com/googlefonts/noto-fonts/raw/main/hinted/ttf/NotoSansArabic/NotoSansArabic-Regular.ttf
+    curl -L -o /app/fonts/NotoSansArabic-Bold.ttf https://github.com/googlefonts/noto-fonts/raw/main/hinted/ttf/NotoSansArabic/NotoSansArabic-Bold.ttf
     
-    # يجب تعديل data_processor.py لاستخدام Noto Sans إذا تم تنزيله
+    # يجب التأكد من أن data_processor.py يستخدم Noto Sans في هذه الحالة
+    # (تم تعديل data_processor.py في رسالة سابقة لاستخدام Noto كبديل )
 fi
 
-# ... (باقي أوامر بدء تشغيل البوت )
+# --- مرحلة التشغيل: بدء تشغيل البوت ---
 
 # تشغيل البوت الرسمي في الخلفية
 echo "Starting Telegram Bot (bot.py)..."
@@ -41,12 +36,6 @@ BOT_PID=$! # حفظ معرف العملية
 echo "Starting Channel Monitor (channel_monitor.py)..."
 python channel_monitor.py &
 MONITOR_PID=$! # حفظ معرف العملية
-#!/bin/bash
-
-# تثبيت حزمة خطوط DejaVu لدعم اللغة العربية في تقارير PDF
-
-
-# ... (باقي أوامر بدء تشغيل البوت)
 
 # الانتظار حتى تنتهي إحدى العمليتين
 wait -n

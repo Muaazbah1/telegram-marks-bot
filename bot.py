@@ -127,14 +127,11 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 
                 # إرسال الرسالة (نعتمد على Telegram في معالجة اتجاه النص)
                 # نستخدم الاسم المستخرج مباشرة
-                
+             fixed_name = fix_arabic(student_name)[::-1] if student_name else 'غير متوفر'
                 message_text = (
                     f"نتيجتك في المادة:\n"
                     f"الرقم الجامعي: {student_id}\n"
-                                       # تصحيح الاسم في الرسالة النصية
-                    fixed_name = fix_arabic(student_name)[::-1] if student_name else 'غير متوفر'
                     f"الاسم: {fixed_name}\n"
-
                     f"الدرجة: {result['grade']:.2f}\n"
                     f"النسبة المئوية (Percentile): {result['percentile']:.2f}%\n"
                     f"هذا يعني أنك أفضل من {result['percentile']:.2f}% من زملائك."

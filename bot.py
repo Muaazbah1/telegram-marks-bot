@@ -127,14 +127,18 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                                # إرسال الرسالة (تطبيق fix_arabic على الاسم)
                 fixed_student_name = fix_arabic(student_name) if student_name else fix_arabic('غير متوفر')
                 
+                # إرسال الرسالة (نعتمد على Telegram في معالجة اتجاه النص)
+                # نستخدم الاسم المستخرج مباشرة
+                
                 message_text = (
-                    fix_arabic("نتيجتك في المادة:") + "\n"
-                    f"{fix_arabic('الرقم الجامعي')}: {student_id}\n"
-                    f"{fix_arabic('الاسم')}: {fixed_student_name}\n"
-                    f"{fix_arabic('الدرجة')}: {result['grade']:.2f}\n"
-                    f"{fix_arabic('النسبة المئوية (Percentile)')}: {result['percentile']:.2f}%\n"
-                    f"{fix_arabic('هذا يعني أنك أفضل من')} {result['percentile']:.2f}% {fix_arabic('من زملائك.')}"
+                    f"نتيجتك في المادة:\n"
+                    f"الرقم الجامعي: {student_id}\n"
+                    f"الاسم: {student_name if student_name else 'غير متوفر'}\n"
+                    f"الدرجة: {result['grade']:.2f}\n"
+                    f"النسبة المئوية (Percentile): {result['percentile']:.2f}%\n"
+                    f"هذا يعني أنك أفضل من {result['percentile']:.2f}% من زملائك."
                 )
+
 
                 # إرسال الصورة والرسالة
                 await context.bot.send_photo(

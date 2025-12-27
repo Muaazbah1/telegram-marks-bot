@@ -9,8 +9,7 @@ from database import get_all_students, get_student_info_by_id, update_student_na
 
 logger = logging.getLogger(__name__)
 
-# إعداد الخط العربي لـ Matplotlib
-# تأكد من أن هذا الجزء يعمل بشكل صحيح مع الخطوط المثبتة في بيئة التشغيل
+# إعداد الخط العربي لـ Matplotlib (نحتفظ بـ DejaVu هنا لأنه يعمل بشكل جيد مع Matplotlib)
 plt.rcParams['font.family'] = 'DejaVu Sans'
 plt.rcParams['font.sans-serif'] = ['DejaVu Sans']
 plt.rcParams['axes.unicode_minus'] = False # لدعم إشارة السالب
@@ -18,6 +17,7 @@ plt.rcParams['axes.unicode_minus'] = False # لدعم إشارة السالب
 def create_normal_distribution_plot(grades, student_grade, mean, std_dev):
     """
     ينشئ مخطط توزيع طبيعي يظهر موقع الطالب.
+    (لا تغيير هنا)
     """
     fig, ax = plt.subplots(figsize=(8, 5))
     
@@ -55,35 +55,33 @@ def create_normal_distribution_plot(grades, student_grade, mean, std_dev):
 class PDF(FPDF):
     """فئة مخصصة لإنشاء تقارير PDF تدعم اللغة العربية."""
     def header(self):
-        self.set_font('DejaVu', 'B', 15)
+        # تم تغيير الخط إلى Noto
+        self.set_font('Noto', 'B', 15)
         self.cell(0, 10, 'تقرير إحصائيات العلامات', 0, 1, 'C')
 
     def footer(self):
         self.set_y(-15)
-        self.set_font('DejaVu', 'I', 8)
+        # تم تغيير الخط إلى Noto
+        self.set_font('Noto', 'I', 8)
         self.cell(0, 10, f'صفحة {self.page_no()}/{{nb}}', 0, 0, 'C')
 
 def create_admin_report_pdf(admin_report_df, mean_grade, std_dev, course_name):
     """
     ينشئ تقرير PDF شامل للمشرف يحتوي على الإحصائيات وجدول الترتيب.
     """
-    # FPDF يتطلب إضافة الخط يدوياً
     pdf = PDF('P', 'mm', 'A4')
-    # يجب التأكد من وجود هذه الخطوط في المسار المحدد
-      # استخدام المسار المحلي للخطوط
-    # استخدام خطوط Noto Sans التي تم تنزيلها كبديل
-  # ... داخل دالة create_admin_report_pdf
-    # استخدام خطوط Noto Sans التي تم تضمينها في مجلد fonts
+    
+    # إضافة خطوط Noto Sans (المسار المحلي)
     pdf.add_font('Noto', '', 'fonts/NotoSansArabic-Regular.ttf', uni=True)
     pdf.add_font('Noto', 'B', 'fonts/NotoSansArabic-Bold.ttf', uni=True)
-    pdf.set_font('Noto', '', 12) # تغيير الخط الافتراضي إلى Noto
-# ...
-
-
+    pdf.add_font('Noto', 'I', 'fonts/NotoSansArabic-Regular.ttf', uni=True) # إضافة خط مائل (نستخدم العادي)
+    
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.alias_nb_pages()
     pdf.add_page()
-    pdf.set_font('DejaVu', '', 12)
+    
+    # استخدام خط Noto
+    pdf.set_font('Noto', '', 12)
 
     # الإحصائيات العامة
     pdf.cell(0, 10, f'المادة: {course_name}', 0, 1, 'R')
@@ -92,7 +90,7 @@ def create_admin_report_pdf(admin_report_df, mean_grade, std_dev, course_name):
     pdf.ln(5)
 
     # جدول الترتيب
-    pdf.set_font('DejaVu', 'B', 10)
+    pdf.set_font('Noto', 'B', 10) # استخدام خط Noto
     col_widths = [20, 30, 60, 20, 30] # عرض الأعمدة
     
     # رؤوس الجدول (بالعربية، تحتاج إلى ترتيب عكسي)
@@ -105,7 +103,7 @@ def create_admin_report_pdf(admin_report_df, mean_grade, std_dev, course_name):
     pdf.ln()
 
     # محتوى الجدول
-    pdf.set_font('DejaVu', '', 10)
+    pdf.set_font('Noto', '', 10) # استخدام خط Noto
     for index, row in admin_report_df.iterrows():
         # البيانات بترتيب عكسي لتناسب العرض من اليمين لليسار
         data = [
@@ -125,6 +123,7 @@ def create_admin_report_pdf(admin_report_df, mean_grade, std_dev, course_name):
     pdf_buffer.seek(0)
     return pdf_buffer
 
+# ... (باقي دالة process_grades)
 def process_grades(grades_data, course_name="المادة"):
     """
     يعالج بيانات العلامات، ويحدث أسماء الطلاب في قاعدة البيانات،

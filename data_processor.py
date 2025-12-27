@@ -36,41 +36,28 @@ plt.rcParams['axes.unicode_minus'] = False # لدعم إشارة السالب
 
 # ... (باقي الاستيرادات والدوال)
 
-def create_normal_distribution_plot(grades, student_grade, mean, std_dev):
+# ... (باقي الاستيرادات والدوال)
+
+def create_grades_histogram(grades, student_grade):
     """
-    ينشئ مخطط توزيع طبيعي يظهر موقع الطالب.
+    ينشئ مخطط أعمدة (Histogram) لتوزيع العلامات ويضع علامة على درجة الطالب.
     """
     fig, ax = plt.subplots(figsize=(8, 5))
     
-    # رسم التوزيع الطبيعي
-    x = np.linspace(min(grades) - 5, max(grades) + 5, 100)
-    p = norm.pdf(x, mean, std_dev)
-    ax.plot(x, p, 'k', linewidth=2)
-    
-    # تظليل منطقة الدرجة
-    if std_dev > 0:
-        fill_x = np.linspace(min(grades) - 5, student_grade, 100)
-        fill_p = norm.pdf(fill_x, mean, std_dev)
-        ax.fill_between(fill_x, fill_p, color='skyblue', alpha=0.5)
+    # رسم مخطط الأعمدة
+    ax.hist(grades, bins=10, edgecolor='black', alpha=0.7, color='skyblue')
     
     # وضع علامة على درجة الطالب
-    # تطبيق fix_arabic على التسمية
-    ax.axvline(student_grade, color='red', linestyle='--', linewidth=1.5, label=fix_arabic(f'درجتك: {student_grade}'))
-    
-    # وضع علامة على المتوسط
-    # تطبيق fix_arabic على التسمية
-    ax.axvline(mean, color='green', linestyle=':', linewidth=1, label=fix_arabic(f'المتوسط: {mean:.2f}'))
+    ax.axvline(student_grade, color='red', linestyle='--', linewidth=2, label=fix_arabic(f'درجتك: {student_grade}'))
 
     # إعداد المحاور والعناوين
-    # تطبيق fix_arabic على العنوان
-    ax.set_title(fix_arabic('توزيع العلامات الطبيعي'), fontsize=14)
-    # تطبيق fix_arabic على تسمية المحور
+    ax.set_title(fix_arabic('توزيع العلامات (مخطط الأعمدة)'), fontsize=14)
     ax.set_xlabel(fix_arabic('الدرجة'), fontsize=12)
-    ax.set_ylabel(fix_arabic('الكثافة'), fontsize=12)
+    ax.set_ylabel(fix_arabic('عدد الطلاب'), fontsize=12)
     
     # تطبيق fix_arabic على مفتاح الرسم
     ax.legend(loc='upper left')
-    ax.grid(True, linestyle='--', alpha=0.6)
+    ax.grid(axis='y', alpha=0.5)
     
     # حفظ المخطط في مخزن مؤقت
     buf = io.BytesIO()
@@ -80,6 +67,7 @@ def create_normal_distribution_plot(grades, student_grade, mean, std_dev):
     return buf
 
 # ... (باقي الدوال)
+
 
 
 class PDF(FPDF):

@@ -116,12 +116,12 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 student_id, student_name, _, _ = student_info
                 
                 # إنشاء مخطط التوزيع
-                plot_buffer = create_normal_distribution_plot(
+                                # إنشاء مخطط الأعمدة (Histogram)
+                plot_buffer = create_grades_histogram(
                     result['all_grades'], 
-                    result['grade'], 
-                    result['mean'], 
-                    result['std_dev']
+                    result['grade']
                 )
+
                 
                 # إرسال الرسالة
                                # إرسال الرسالة (تطبيق fix_arabic على الاسم)

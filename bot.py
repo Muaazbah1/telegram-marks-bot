@@ -137,7 +137,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         # 2. تحليل العلامات
         marks_df = parse_grades_pdf(pdf_path)
         
-        if marks_df.empty:
+        if not marks_df:
             await update.message.reply_text('لم يتم العثور على أي بيانات علامات صالحة في ملف PDF.')
             return
 
@@ -152,7 +152,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             
             merged_df = pd.merge(marks_df, registered_students_df, on='student_id', how='inner')
             
-            if merged_df.empty:
+            if not merged_df:
                 await update.message.reply_text('تم تحليل الملف بنجاح، ولكن لم يتم العثور على علامات لأي طالب مسجل.')
                 return
 

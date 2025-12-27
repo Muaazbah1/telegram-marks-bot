@@ -27,14 +27,25 @@ plt.rcParams['font.family'] = 'DejaVu Sans'
 plt.rcParams['font.sans-serif'] = ['DejaVu Sans']
 plt.rcParams['axes.unicode_minus'] = False # لدعم إشارة السالب
 
+# ... (في data_processor.py)
+
 def create_grades_histogram(grades, student_grade):
     """
     ينشئ مخطط أعمدة (Histogram) لتوزيع العلامات ويضع علامة على درجة الطالب.
     """
     fig, ax = plt.subplots(figsize=(8, 5))
     
-    # رسم مخطط الأعمدة (تم تحديد 100 عمود ونطاق من 0 إلى 100)
-    ax.hist(grades, bins=100, range=(0, 100), edgecolor='black', alpha=0.7, color='skyblue')
+    # رسم مخطط الأعمدة
+    # نستخدم weights لتلوين العمود الخاص بدرجة الطالب
+    
+    # 1. إنشاء بيانات الأعمدة
+    counts, bins, patches = ax.hist(grades, bins=100, range=(0, 100), edgecolor='black', alpha=0.7, color='skyblue')
+    
+    # 2. تلوين العمود الخاص بدرجة الطالب
+    for patch, bin_start, bin_end in zip(patches, bins[:-1], bins[1:]):
+        if bin_start <= student_grade < bin_end:
+            patch.set_facecolor('red')
+            break
     
     # وضع علامة على درجة الطالب
     ax.axvline(student_grade, color='red', linestyle='--', linewidth=2, label=fix_arabic(f'درجتك: {student_grade}'))

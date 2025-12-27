@@ -132,7 +132,9 @@ def create_admin_report_pdf(admin_report_df, mean_grade, std_dev, course_name):
         data = [
             f'{row["النسبة المئوية"]:.2f}%',
             f'{row["الدرجة"]:.2f}',
-            row["اسم الطالب"] if row["اسم الطالب"] else 'غير متوفر',
+                        # تصحيح الاسم: نستخدم fix_arabic ثم نعكسه مرة أخرى لتعويض انعكاس fpdf2
+            fix_arabic(row["اسم الطالب"])[::-1] if row["اسم الطالب"] else fix_arabic('غير متوفر'),
+
             row["الرقم الجامعي"],
             str(row["الترتيب"])
         ]

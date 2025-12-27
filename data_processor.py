@@ -25,6 +25,8 @@ plt.rcParams['font.family'] = 'DejaVu Sans'
 plt.rcParams['font.sans-serif'] = ['DejaVu Sans']
 plt.rcParams['axes.unicode_minus'] = False # لدعم إشارة السالب
 
+# ... (باقي الاستيرادات والدوال)
+
 def create_normal_distribution_plot(grades, student_grade, mean, std_dev):
     """
     ينشئ مخطط توزيع طبيعي يظهر موقع الطالب.
@@ -43,15 +45,21 @@ def create_normal_distribution_plot(grades, student_grade, mean, std_dev):
         ax.fill_between(fill_x, fill_p, color='skyblue', alpha=0.5)
     
     # وضع علامة على درجة الطالب
-    ax.axvline(student_grade, color='red', linestyle='--', linewidth=1.5, label=f'درجتك: {student_grade}')
+    # تطبيق fix_arabic على التسمية
+    ax.axvline(student_grade, color='red', linestyle='--', linewidth=1.5, label=fix_arabic(f'درجتك: {student_grade}'))
     
     # وضع علامة على المتوسط
-    ax.axvline(mean, color='green', linestyle=':', linewidth=1, label=f'المتوسط: {mean:.2f}')
+    # تطبيق fix_arabic على التسمية
+    ax.axvline(mean, color='green', linestyle=':', linewidth=1, label=fix_arabic(f'المتوسط: {mean:.2f}'))
 
     # إعداد المحاور والعناوين
-    ax.set_title('توزيع العلامات الطبيعي', fontsize=14)
-    ax.set_xlabel('الدرجة', fontsize=12)
-    ax.set_ylabel('الكثافة', fontsize=12)
+    # تطبيق fix_arabic على العنوان
+    ax.set_title(fix_arabic('توزيع العلامات الطبيعي'), fontsize=14)
+    # تطبيق fix_arabic على تسمية المحور
+    ax.set_xlabel(fix_arabic('الدرجة'), fontsize=12)
+    ax.set_ylabel(fix_arabic('الكثافة'), fontsize=12)
+    
+    # تطبيق fix_arabic على مفتاح الرسم
     ax.legend(loc='upper left')
     ax.grid(True, linestyle='--', alpha=0.6)
     
@@ -61,6 +69,9 @@ def create_normal_distribution_plot(grades, student_grade, mean, std_dev):
     plt.close(fig)
     buf.seek(0)
     return buf
+
+# ... (باقي الدوال)
+
 
 class PDF(FPDF):
     """فئة مخصصة لإنشاء تقارير PDF تدعم اللغة العربية."""

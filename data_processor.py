@@ -68,6 +68,8 @@ class PDF(FPDF):
         self.set_font('Noto', 'I', 8)
         self.cell(0, 10, fix_arabic(f'صفحة {self.page_no()}/{{nb}}'), 0, 0, 'C')
 
+# ... (باقي الدوال)
+
 def create_admin_report_pdf(admin_report_df, mean_grade, std_dev, course_name):
     """
     ينشئ تقرير PDF شامل للمشرف يحتوي على الإحصائيات وجدول الترتيب.
@@ -109,6 +111,11 @@ def create_admin_report_pdf(admin_report_df, mean_grade, std_dev, course_name):
 
     # محتوى الجدول
     pdf.set_font('Noto', '', 10) # استخدام خط Noto
+    
+    # تعريف ألوان التلوين
+    RED_FILL = (255, 200, 200) # لون أحمر فاتح للخلفية
+    NO_FILL = (255, 255, 255) # لون أبيض للخلفية
+
     for index, row in admin_report_df.iterrows():
         # البيانات بترتيب عكسي لتناسب العرض من اليمين لليسار
         data = [
@@ -119,11 +126,22 @@ def create_admin_report_pdf(admin_report_df, mean_grade, std_dev, course_name):
             str(row["الترتيب"])
         ]
         
+        # تحديد ترتيب الأعمدة لتلوين عمود العلامة (العمود الثاني من اليسار، الثالث من اليمين)
+        # الترتيب العكسي: [الترتيب, الرقم الجامعي, الاسم, الدرجة, النسبة المئوية]
+        # الدرجة هي العنصر الرابع في القائمة العكسية (i=3)
+        
         for i, item in enumerate(reversed(data)):
-            # تم تطبيق fix_arabic على النص الذي قد يكون عربياً
-            pdf.cell(col_widths[i], 6, fix_arabic(str(item)), 1, 0, 'C')
+            # تحديد لون الخلفية: أحمر للدرجة، أبيض للباقي
+            fill_color = RED_FILL if i == 3 else NO_FILL
+            pdf.set_fill_color(*fill_color)
+            
+            # تطبيق fix_arabic على النص الذي قد يكون عربياً
+            pdf.cell(col_widths[i], 6, fix_arabic(str(item)), 1, 0, 'C', 1) # 1 لتفعيل التلوين
         pdf.ln()
 
+    # إعادة تعيين لون الخلفية
+    pdf.set_fill_color(*NO_FILL)
+    
     # حفظ التقرير في مخزن مؤقت (تم تصحيح مشكلة bytearray)
     pdf_output = pdf.output(dest='S')
     if isinstance(pdf_output, str):

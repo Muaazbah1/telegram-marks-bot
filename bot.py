@@ -71,105 +71,103 @@ async def handle_registration(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.message.reply_text('الرجاء إدخال رقم جامعي صحيح مكون من 5 أرقام فقط.')
 
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """يتعامل مع ملفات PDF المرسلة إلى البوت (المعاد توجيهها من القناة)."""
+    """
+    يعالج المستندات المرسلة (ملفات PDF) لتحليل العلامات وإرسال النتائج.
+    """
+    user_id = update.effective_user.id
     
-    # 1. التحقق من أن الملف هو PDF
-    if not update.message.document or update.message.document.mime_type != "application/pdf":
-        # لا ترد على رسائل غير PDF لتجنب إزعاج المستخدمين في القناة
-        return
-
-    file_id = update.message.document.file_id
-    file = await context.bot.get_file(file_id)
-    
-    # 2. تنزيل الملف
-    pdf_path = f"/tmp/{file_id}.pdf"
-    await file.download_to_drive(pdf_path)
-    
-    # رسالة إشعار بالبدء (يمكن إرسالها إلى قناة المشرف أو تسجيلها)
-    logger.info(f"تم استلام ملف العلامات. جاري المعالجة...")
-
-    # 3. تحليل ملف PDF
-    try:
-        grades_data = parse_grades_pdf(pdf_path) # تم تصحيح اسم الدالة
+    # التحقق من أن الملف هو PDF
+    if update.message.document and update.message.document.mime_type == 'application/pdf':
         
-        # 4. التحقق من البيانات المستخرجة (تم تصحيح طريقة التحقق)
-        if not grades_data:
-            logger.warning("فشل تحليل ملف PDF أو لا يحتوي على بيانات علامات.")
-            # يمكن إرسال رسالة خطأ للمشرف هنا
-            os.remove(pdf_path)
+        # 1. التحقق من أن المستخدم هو المشرف
+        if str(user_id) != STATISTICS_OUTPUT_CHANNEL_ID:
+            await update.message.reply_text("عذراً، لا يمكن إلا للمشرف إرسال ملفات العلامات.")
             return
 
-        # 5. معالجة البيانات
-        student_results, admin_pdf_buffer = process_grades(grades_data, course_name="علامات المادة")
-        
-        # 6. إرسال النتائج الفردية (تم تصحيح المنطق لاستخدام student_results)
-        if student_results:
-            for user_id, result in student_results.items():
-                # استخراج بيانات الطالب من قاعدة البيانات للحصول على الرقم الجامعي والاسم
-                student_info = get_student_info_by_user_id(user_id)
-                if not student_info:
-                    logger.warning(f"الطالب ذو user_id {user_id} مسجل ولكن لا توجد معلومات في قاعدة البيانات.")
-                    continue
-                
-                student_id, student_name, _, _ = student_info
-                
-                # إنشاء مخطط التوزيع
-                                # إنشاء مخطط الأعمدة (Histogram)
-                plot_buffer = create_grades_histogram(
-                    result['all_grades'], 
-                    result['grade']
-                )
+        pdf_path = None
+        try:
+            # 2. تنزيل الملف
+            file = await update.message.document.get_file()
+            pdf_path = os.path.join("/tmp", update.message.document.file_name)
+            await file.download_to_drive(pdf_path)
+            
+            await update.message.reply_text("تم استلام الملف. يرجى الانتظار، تتم معالجة العلامات...")
 
-                
-                # إرسال الرسالة
-                               # إرسال الرسالة (تطبيق fix_arabic على الاسم)
-                fixed_student_name = fix_arabic(student_name) if student_name else fix_arabic('غير متوفر')
-                
-                # إرسال الرسالة (نعتمد على Telegram في معالجة اتجاه النص)
-                # نستخدم الاسم المستخرج مباشرة
-               fixed_name = fix_arabic(student_name)[::-1] if student_name else 'غير متوفر'
-                message_text = (
-                    f"نتيجتك في المادة:\n"
-                    f"الرقم الجامعي: {student_id}\n"
-                    f"الاسم: {fixed_name}\n"
-                    f"الدرجة: {result['grade']:.2f}\n"
-                    f"النسبة المئوية (Percentile): {result['percentile']:.2f}%\n"
-                    f"هذا يعني أنك أفضل من {result['percentile']:.2f}% من زملائك."
-                )
+            # 3. تحليل ملف PDF
+            grades_data = parse_grades_pdf(pdf_path)
+            if not grades_data:
+                await update.message.reply_text("فشل تحليل ملف PDF. قد يكون التنسيق غير مدعوم أو لا يحتوي على بيانات علامات.")
+                os.remove(pdf_path)
+                return
 
-
-                # إرسال الصورة والرسالة
-                await context.bot.send_photo(
-                    chat_id=user_id,
-                    photo=plot_buffer,
-                    caption=message_text
+            # 4. معالجة البيانات
+            course_name = update.message.document.file_name.replace(".pdf", "")
+            student_results, admin_pdf_buffer = process_grades(grades_data, course_name=course_name)
+            
+            # 5. إرسال النتائج الفردية
+            if student_results:
+                for user_id, result in student_results.items():
+                    # التحقق من معلومات الطالب
+                    student_info = get_student_info_by_user_id(user_id)
+                    if not student_info:
+                        logger.warning(f"الطالب {user_id} مسجل ولكن لا توجد معلومات في قاعدة البيانات.")
+                        continue
+                    
+                    student_id, student_name, _, _ = student_info
+                    
+                    # إنشاء مخطط الأعمدة (Histogram)
+                    plot_buffer = create_grades_histogram(
+                        result['all_grades'], 
+                        result['grade']
+                    )
+                    
+                    # تصحيح الاسم في الرسالة النصية (الحل النهائي)
+                    fixed_name = fix_arabic(student_name)[::-1] if student_name else 'غير متوفر'
+                    
+                    # إرسال الرسالة
+                    message_text = (
+                        f"نتيجتك في المادة:\n"
+                        f"الرقم الجامعي: {student_id}\n"
+                        f"الاسم: {fixed_name}\n"
+                        f"الدرجة: {result['grade']:.2f}\n"
+                        f"النسبة المئوية (Percentile): {result['percentile']:.2f}%\n"
+                        f"هذا يعني أنك أفضل من {result['percentile']:.2f}% من زملائك."
+                    )
+                    
+                    # إرسال الصورة والرسالة
+                    await context.bot.send_photo(
+                        chat_id=user_id,
+                        photo=plot_buffer,
+                        caption=message_text
+                    )
+                    
+                    logger.info(f"تم إرسال النتيجة للطالب {student_id} ({user_id}).")
+            
+            # 6. إرسال تقرير المشرف (بعد إرسال النتائج الفردية)
+            if admin_pdf_buffer:
+                await context.bot.send_document(
+                    chat_id=STATISTICS_OUTPUT_CHANNEL_ID,
+                    document=admin_pdf_buffer,
+                    filename=f"تقرير_علامات_{course_name}.pdf",
+                    caption=f"✅ تم الانتهاء من معالجة ملف العلامات {course_name}.pdf.\n\nالتقرير الإحصائي الشامل مرفق."
                 )
-                
-                logger.info(f"تم إرسال النتيجة للطالب {student_id} ({user_id}).")
-        
-        # 7. إرسال تقرير المشرف
-        if admin_pdf_buffer:
-            await context.bot.send_document(
+                await update.message.reply_text("✅ تم الانتهاء من معالجة الملف وإرسال التقرير الإحصائي إلى قناة المشرف.")
+
+        except Exception as e:
+            logger.error(f"خطأ أثناء معالجة الملف: {e}")
+            await update.message.reply_text(f"❌ حدث خطأ غير متوقع أثناء معالجة الملف: {e}")
+            # إرسال رسالة خطأ للمشرف
+            await context.bot.send_message(
                 chat_id=STATISTICS_OUTPUT_CHANNEL_ID,
-                document=admin_pdf_buffer,
-                filename="تقرير_إحصائيات_العلامات.pdf",
-                caption="تقرير إحصائيات العلامات الشامل."
+                text=f"❌ خطأ فادح أثناء معالجة ملف العلامات:\n{e}"
             )
-            logger.info("تم إرسال تقرير المشرف بنجاح.")
+        finally:
+            # 7. تنظيف الملف المؤقت
+            if pdf_path and os.path.exists(pdf_path):
+                os.remove(pdf_path)
+    else:
+        await update.message.reply_text("الرجاء إرسال ملف علامات بصيغة PDF.")
 
-    except Exception as e:
-        logger.error(f"خطأ أثناء معالجة الملف: {e}")
-        # إرسال رسالة خطأ للمشرف
-        await context.bot.send_message(
-            chat_id=STATISTICS_OUTPUT_CHANNEL_ID,
-            text=f"❌ خطأ فادح أثناء معالجة ملف العلامات:\n{e}"
-        )
-    finally:
-        # 8. تنظيف الملف المؤقت
-        if os.path.exists(pdf_path):
-            os.remove(pdf_path)
-
-# --- الوظيفة الرئيسية ---
 
 def main() -> None:
     """تبدأ تشغيل البوت."""

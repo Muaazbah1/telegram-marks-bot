@@ -5,65 +5,40 @@ import matplotlib.pyplot as plt
 from fpdf import FPDF
 import logging
 import io
+import arabic_reshaper # جديد
+from bidi.algorithm import get_display # جديد
 from database import get_all_students, get_student_info_by_id, update_student_name
 
 logger = logging.getLogger(__name__)
+
+# دالة تصحيح النص العربي
+def fix_arabic(text):
+    """تصحح النص العربي ليعرض بشكل صحيح (تشكيل وعرض من اليمين لليسار)."""
+    if not text:
+        return ""
+    reshaped_text = arabic_reshaper.reshape(str(text))
+    bidi_text = get_display(reshaped_text)
+    return bidi_text
 
 # إعداد الخط العربي لـ Matplotlib (نحتفظ بـ DejaVu هنا لأنه يعمل بشكل جيد مع Matplotlib)
 plt.rcParams['font.family'] = 'DejaVu Sans'
 plt.rcParams['font.sans-serif'] = ['DejaVu Sans']
 plt.rcParams['axes.unicode_minus'] = False # لدعم إشارة السالب
 
-def create_normal_distribution_plot(grades, student_grade, mean, std_dev):
-    """
-    ينشئ مخطط توزيع طبيعي يظهر موقع الطالب.
-    (لا تغيير هنا)
-    """
-    fig, ax = plt.subplots(figsize=(8, 5))
-    
-    # رسم التوزيع الطبيعي
-    x = np.linspace(min(grades) - 5, max(grades) + 5, 100)
-    p = norm.pdf(x, mean, std_dev)
-    ax.plot(x, p, 'k', linewidth=2)
-    
-    # تظليل منطقة الدرجة
-    if std_dev > 0:
-        fill_x = np.linspace(min(grades) - 5, student_grade, 100)
-        fill_p = norm.pdf(fill_x, mean, std_dev)
-        ax.fill_between(fill_x, fill_p, color='skyblue', alpha=0.5)
-    
-    # وضع علامة على درجة الطالب
-    ax.axvline(student_grade, color='red', linestyle='--', linewidth=1.5, label=f'درجتك: {student_grade}')
-    
-    # وضع علامة على المتوسط
-    ax.axvline(mean, color='green', linestyle=':', linewidth=1, label=f'المتوسط: {mean:.2f}')
-
-    # إعداد المحاور والعناوين
-    ax.set_title('توزيع العلامات الطبيعي', fontsize=14)
-    ax.set_xlabel('الدرجة', fontsize=12)
-    ax.set_ylabel('الكثافة', fontsize=12)
-    ax.legend(loc='upper left')
-    ax.grid(True, linestyle='--', alpha=0.6)
-    
-    # حفظ المخطط في مخزن مؤقت
-    buf = io.BytesIO()
-    plt.savefig(buf, format='png', bbox_inches='tight')
-    plt.close(fig)
-    buf.seek(0)
-    return buf
+# ... (دالة create_normal_distribution_plot لا تحتاج لتعديل لأنها تتعامل مع Matplotlib)
 
 class PDF(FPDF):
     """فئة مخصصة لإنشاء تقارير PDF تدعم اللغة العربية."""
     def header(self):
-        # تم تغيير الخط إلى Noto
+        # تم تطبيق fix_arabic
         self.set_font('Noto', 'B', 15)
-        self.cell(0, 10, 'تقرير إحصائيات العلامات', 0, 1, 'C')
+        self.cell(0, 10, fix_arabic('تقرير إحصائيات العلامات'), 0, 1, 'C')
 
     def footer(self):
         self.set_y(-15)
-        # تم تغيير الخط إلى Noto
+        # تم تطبيق fix_arabic
         self.set_font('Noto', 'I', 8)
-        self.cell(0, 10, f'صفحة {self.page_no()}/{{nb}}', 0, 0, 'C')
+        self.cell(0, 10, fix_arabic(f'صفحة {self.page_no()}/{{nb}}'), 0, 0, 'C')
 
 def create_admin_report_pdf(admin_report_df, mean_grade, std_dev, course_name):
     """
@@ -84,9 +59,10 @@ def create_admin_report_pdf(admin_report_df, mean_grade, std_dev, course_name):
     pdf.set_font('Noto', '', 12)
 
     # الإحصائيات العامة
-    pdf.cell(0, 10, f'المادة: {course_name}', 0, 1, 'R')
-    pdf.cell(0, 10, f'متوسط الدرجات: {mean_grade:.2f}', 0, 1, 'R')
-    pdf.cell(0, 10, f'الانحراف المعياري: {std_dev:.2f}', 0, 1, 'R')
+    # تم تطبيق fix_arabic
+    pdf.cell(0, 10, fix_arabic(f'المادة: {course_name}'), 0, 1, 'R')
+    pdf.cell(0, 10, fix_arabic(f'متوسط الدرجات: {mean_grade:.2f}'), 0, 1, 'R')
+    pdf.cell(0, 10, fix_arabic(f'الانحراف المعياري: {std_dev:.2f}'), 0, 1, 'R')
     pdf.ln(5)
 
     # جدول الترتيب
@@ -99,7 +75,8 @@ def create_admin_report_pdf(admin_report_df, mean_grade, std_dev, course_name):
     # رسم رؤوس الجدول
     pdf.set_fill_color(200, 220, 255)
     for i, header in enumerate(reversed(headers)):
-        pdf.cell(col_widths[i], 7, header, 1, 0, 'C', 1)
+        # تم تطبيق fix_arabic
+        pdf.cell(col_widths[i], 7, fix_arabic(header), 1, 0, 'C', 1)
     pdf.ln()
 
     # محتوى الجدول
@@ -115,13 +92,12 @@ def create_admin_report_pdf(admin_report_df, mean_grade, std_dev, course_name):
         ]
         
         for i, item in enumerate(reversed(data)):
-            pdf.cell(col_widths[i], 6, str(item), 1, 0, 'C')
+            # تم تطبيق fix_arabic على النص الذي قد يكون عربياً
+            pdf.cell(col_widths[i], 6, fix_arabic(str(item)), 1, 0, 'C')
         pdf.ln()
 
-    # حفظ التقرير في مخزن مؤقت
-    # حفظ التقرير في مخزن مؤقت
+    # حفظ التقرير في مخزن مؤقت (تم تصحيح مشكلة bytearray)
     pdf_output = pdf.output(dest='S')
-    # إذا كان الإخراج نصاً، قم بتحويله إلى بايتس. إذا كان بايتس، استخدمه مباشرة.
     if isinstance(pdf_output, str):
         pdf_buffer = io.BytesIO(pdf_output.encode('latin1'))
     else:
@@ -129,7 +105,6 @@ def create_admin_report_pdf(admin_report_df, mean_grade, std_dev, course_name):
         
     pdf_buffer.seek(0)
     return pdf_buffer
-
 
 # ... (باقي دالة process_grades)
 def process_grades(grades_data, course_name="المادة"):

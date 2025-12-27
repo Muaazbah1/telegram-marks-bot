@@ -9,6 +9,13 @@ BOT_PID=$! # حفظ معرف العملية
 echo "Starting Channel Monitor (channel_monitor.py)..."
 python channel_monitor.py &
 MONITOR_PID=$! # حفظ معرف العملية
+#!/bin/bash
+
+# تثبيت حزمة خطوط DejaVu لدعم اللغة العربية في تقارير PDF
+sudo apt-get update
+sudo apt-get install -y ttf-dejavu-core
+
+# ... (باقي أوامر بدء تشغيل البوت)
 
 # الانتظار حتى تنتهي إحدى العمليتين
 wait -n

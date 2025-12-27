@@ -17,7 +17,9 @@ from config import TELEGRAM_BOT_TOKEN, STATISTICS_OUTPUT_CHANNEL_ID, UNIVERSITIE
 from database import init_db, register_student, get_student_info_by_user_id, get_student_info_by_id, get_all_students, update_student_name
 
 from pdf_parser import parse_grades_pdf
-from data_processor import process_grades, create_normal_distribution_plot, create_admin_report_pdf
+from data_processor import process_grades, create_admin_report_pdf
+from data_processor import create_normal_distribution_plot # استيراد الدالة بشكل منفصل
+
 
 # استخراج أسماء الجامعة والكلية من القاموس (افتراضياً أول إدخال)
 UNIVERSITY_NAME = list(UNIVERSITIES.keys())[0]

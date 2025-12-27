@@ -4,6 +4,8 @@ import io
 from telegram import Update, Bot
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
+from data_processor import process_grades, create_normal_distribution_plot, create_admin_report_pdf, fix_arabic # إضافة fix_arabic
+
 # استيراد الدوال من الملفات الأخرى
 from config import TELEGRAM_BOT_TOKEN, STATISTICS_OUTPUT_CHANNEL_ID, UNIVERSITIES
 from database import init_db, register_student, get_student_info_by_user_id, get_student_info_by_id, get_all_students, update_student_name

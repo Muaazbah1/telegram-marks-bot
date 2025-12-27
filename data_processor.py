@@ -119,9 +119,17 @@ def create_admin_report_pdf(admin_report_df, mean_grade, std_dev, course_name):
         pdf.ln()
 
     # حفظ التقرير في مخزن مؤقت
-    pdf_buffer = io.BytesIO(pdf.output(dest='S').encode('latin1'))
+    # حفظ التقرير في مخزن مؤقت
+    pdf_output = pdf.output(dest='S')
+    # إذا كان الإخراج نصاً، قم بتحويله إلى بايتس. إذا كان بايتس، استخدمه مباشرة.
+    if isinstance(pdf_output, str):
+        pdf_buffer = io.BytesIO(pdf_output.encode('latin1'))
+    else:
+        pdf_buffer = io.BytesIO(pdf_output)
+        
     pdf_buffer.seek(0)
     return pdf_buffer
+
 
 # ... (باقي دالة process_grades)
 def process_grades(grades_data, course_name="المادة"):

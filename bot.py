@@ -135,7 +135,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
 
         # 2. تحليل العلامات
-        marks_df = parse_pdf_marks(pdf_path)
+        marks_df = parse_grades_pdf(pdf_path)
         
         if marks_df.empty:
             await update.message.reply_text('لم يتم العثور على أي بيانات علامات صالحة في ملف PDF.')

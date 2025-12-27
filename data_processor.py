@@ -12,13 +12,22 @@ from database import get_all_students, get_student_info_by_id, update_student_na
 logger = logging.getLogger(__name__)
 
 # دالة تصحيح النص العربي
-def fix_arabic(text):
-    """تصحح النص العربي ليعرض بشكل صحيح (تشكيل وعرض من اليمين لليسار)."""
-    if not text:
-        return ""
-    reshaped_text = arabic_reshaper.reshape(str(text))
-    bidi_text = get_display(reshaped_text)
-    return bidi_text
+    # محتوى الجدول
+    pdf.set_font('Noto', '', 10) # استخدام خط Noto
+    for index, row in admin_report_df.iterrows():
+        # البيانات بترتيب عكسي لتناسب العرض من اليمين لليسار
+        data = [
+            f'{row["النسبة المئوية"]:.2f}%',
+            f'{row["الدرجة"]:.2f}',
+            row["اسم الطالب"] if row["اسم الطالب"] else 'غير متوفر',
+            row["الرقم الجامعي"],
+            str(row["الترتيب"])
+        ]
+        
+        for i, item in enumerate(reversed(data)):
+            # تم تطبيق fix_arabic على النص الذي قد يكون عربياً
+            pdf.cell(col_widths[i], 6, fix_arabic(str(item)), 1, 0, 'C')
+        pdf.ln()
 
 # إعداد الخط العربي لـ Matplotlib (نحتفظ بـ DejaVu هنا لأنه يعمل بشكل جيد مع Matplotlib)
 plt.rcParams['font.family'] = 'DejaVu Sans'
